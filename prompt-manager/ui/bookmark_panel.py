@@ -61,22 +61,23 @@ class BookmarkPanel(QWidget):
         item.setToolTip(entry.content[:500])
 
         widget = QWidget()
+        widget.setStyleSheet("background: #f9f9f9; border-bottom: 1px solid #e0e0e0;")
         h = QHBoxLayout(widget)
-        h.setContentsMargins(0, 2, 0, 2)
-        h.setSpacing(4)
+        h.setContentsMargins(6, 4, 6, 4)
+        h.setSpacing(6)
 
         label = QLabel(text)
         label.setWordWrap(False)
-        label.setStyleSheet("color: #222; font-size: 12px;")
+        label.setStyleSheet("color: #111; font-size: 12px; background: transparent; border: none;")
         h.addWidget(label, 1)
 
         copy_btn = QPushButton("复制")
-        copy_btn.setFixedSize(50, 24)
-        copy_btn.setStyleSheet("font-size: 11px; padding: 0;")
+        copy_btn.setFixedSize(44, 22)
+        copy_btn.setStyleSheet("QPushButton { font-size: 11px; padding: 0px 4px; color: #333; background: #e8e8e8; border: 1px solid #ccc; border-radius: 3px; } QPushButton:hover { background: #d0d0d0; }")
         copy_btn.clicked.connect(lambda checked=False, e=entry: self._copy_entry(e))
         h.addWidget(copy_btn)
 
-        widget.setMinimumHeight(30)
+        widget.setMinimumHeight(36)
         item.setSizeHint(widget.sizeHint())
         self._list.setItemWidget(item, widget)
         return item
