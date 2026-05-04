@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
     QPushButton, QLabel, QMessageBox, QApplication,
 )
-from PySide6.QtCore import Signal, QThread, QTimer
+from PySide6.QtCore import Signal, QThread
 from PySide6.QtGui import QFont
 
 from api.deepseek_client import DeepSeekClient
@@ -46,12 +46,10 @@ class EditorPanel(QWidget):
         super().__init__(parent)
         self._config_getter = config_getter
         self._current_history_id = ""
+        self._loading = False
+        self._ai_worker = None
+        self._title_worker = None
         self._build_ui()
-
-        self._save_timer = QTimer(self)
-        self._save_timer.setSingleShot(True)
-        self._save_timer.setInterval(1500)
-        self._save_timer.timeout.connect(self._auto_save)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -89,6 +87,11 @@ class EditorPanel(QWidget):
         self._optimize_btn.clicked.connect(lambda: self._run_ai("optimize"))
         btn_layout.addWidget(self._optimize_btn)
 
+        self._save_btn = QPushButton("保存")
+        self._save_btn.setToolTip("保存当前内容到历史记录")
+        self._save_btn.clicked.connect(self._manual_save)
+        btn_layout.addWidget(self._save_btn)
+
         btn_layout.addStretch()
 
         self._bookmark_btn = QPushButton("收藏")
@@ -123,15 +126,15 @@ class EditorPanel(QWidget):
         layout.addWidget(self._status)
 
     def _on_text_changed(self):
+        if self._loading:
+            return
         text = self._editor.toPlainText()
         self._status.setText(f"字数: {len(text)}")
-        self._save_timer.start()
 
-    def _auto_save(self):
+    def _ensure_saved(self):
         content = self._editor.toPlainText().strip()
         if not content:
             return
-
         if self._current_history_id:
             self.history_updated.emit(self._current_history_id, content, "")
         else:
@@ -140,25 +143,35 @@ class EditorPanel(QWidget):
             self.history_created.emit(entry)
             self._request_title(entry.id, content)
 
+    def _manual_save(self):
+        content = self._editor.toPlainText().strip()
+        if not content:
+            QMessageBox.information(self, "提示", "没有内容可以保存")
+            return
+        self._ensure_saved()
+
     def _request_title(self, entry_id: str, content: str):
         config = self._config_getter()
         if not config.api_key:
             return
-        worker = _AIWorker(
+        if self._title_worker is not None and self._title_worker.isRunning():
+            return
+        self._title_worker = _AIWorker(
             api_key=config.api_key,
             base_url=config.base_url,
             model=config.model,
             task="generate_title",
             content=content,
         )
-        worker.result_signal.connect(self._on_title_ready)
-        worker.start()
+        self._title_worker.result_signal.connect(self._on_title_ready)
+        self._title_worker.finished.connect(lambda: setattr(self, '_title_worker', None))
+        self._title_worker.start()
 
     def _on_title_ready(self, task: str, ok: bool, result: str):
         if task != "generate_title" or not ok or not result:
             return
         title = result.strip()[:12]
-        if title:
+        if title and self._current_history_id:
             self.history_updated.emit(self._current_history_id, "", title)
 
     def _on_clear(self):
@@ -172,8 +185,7 @@ class EditorPanel(QWidget):
         if not content:
             QMessageBox.information(self, "提示", "没有内容可以收藏")
             return
-        self._save_timer.stop()
-        self._auto_save()
+        self._ensure_saved()
         self.bookmark_requested.emit(content)
 
     def _run_ai(self, action: str):
@@ -188,23 +200,23 @@ class EditorPanel(QWidget):
             QMessageBox.warning(self, "提示", "请先在设置中配置 API Key")
             return
 
-        self._save_timer.stop()
-        self._auto_save()
+        self._ensure_saved()
 
         self._format_btn.setEnabled(False)
         self._optimize_btn.setEnabled(False)
         self._copy_btn.setEnabled(False)
         self._status.setText("正在调用 AI...")
 
-        worker = _AIWorker(
+        self._ai_worker = _AIWorker(
             api_key=api_key,
             base_url=config.base_url,
             model=config.model,
             task=action,
             content=content,
         )
-        worker.result_signal.connect(self._on_ai_result)
-        worker.start()
+        self._ai_worker.result_signal.connect(self._on_ai_result)
+        self._ai_worker.finished.connect(lambda: setattr(self, '_ai_worker', None))
+        self._ai_worker.start()
 
     def _on_ai_result(self, task: str, ok: bool, result: str):
         if task == "generate_title":
@@ -226,8 +238,9 @@ class EditorPanel(QWidget):
             QApplication.clipboard().setText(text)
 
     def set_content(self, text: str):
+        self._loading = True
         self._editor.setPlainText(text)
-        self._save_timer.start()
+        self._loading = False
 
     def get_content(self) -> str:
         return self._editor.toPlainText()
