@@ -14,6 +14,7 @@ from .history_panel import HistoryPanel
 from .bookmark_panel import BookmarkPanel
 from .bookmark_dialog import BookmarkDialog
 from .settings_dialog import SettingsDialog
+from .about_dialog import AboutDialog
 
 
 class MainWindow(QMainWindow):
@@ -21,7 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._config = config
         self._data_store = data_store
-        self.setWindowTitle("提示词编辑管理")
+        self.setWindowTitle("提示词管理")
         self.resize(1100, 700)
         self._build_ui()
         self._build_menu()
@@ -68,6 +69,11 @@ class MainWindow(QMainWindow):
         exit_action = QAction("退出", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        help_menu = menubar.addMenu("关于")
+        about_action = QAction("关于提示词管理", self)
+        about_action.triggered.connect(self._open_about)
+        help_menu.addAction(about_action)
 
     def _get_config(self) -> Config:
         return self._config
@@ -121,4 +127,8 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self):
         dialog = SettingsDialog(self._config, self)
+        dialog.exec_()
+
+    def _open_about(self):
+        dialog = AboutDialog(self)
         dialog.exec_()
