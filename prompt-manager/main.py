@@ -11,8 +11,8 @@ from ui.main_window import MainWindow
 
 def _get_icon_path():
     if getattr(sys, 'frozen', False):
-        return os.path.join(sys._MEIPASS, "头像图标.ico")
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "头像图标.ico")
+        return os.path.join(sys._MEIPASS, "icon-rounded.ico")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon-rounded.ico")
 
 
 def main():

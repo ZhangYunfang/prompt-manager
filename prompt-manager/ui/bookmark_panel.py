@@ -71,11 +71,9 @@ class BookmarkPanel(QWidget):
             self._list.addItem(item)
 
     def _make_item(self, entry: BookmarkEntry) -> QListWidgetItem:
-        tags = "  ".join(f"[{t}]" for t in entry.tags) if entry.tags else ""
         heading = entry.title or entry.content.split("\n")[0][:30]
-        display = f"[{heading}]"
-        if tags:
-            display = f"{tags}  [{heading}]"
+        tags = "  ".join(f"[{t}]" for t in entry.tags) if entry.tags else ""
+        display = f"{heading}\n{tags}" if tags else heading
 
         item = QListWidgetItem(display)
         item.setData(Qt.UserRole, entry.id)
