@@ -25,12 +25,17 @@ class DataStore:
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
             return [cls.from_dict(item) for item in data]
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, TypeError):
             return []
 
     def _write_entries(self, filepath: Path, entries: list):
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump([e.to_dict() for e in entries], f, indent=2, ensure_ascii=False)
+        tmp = filepath.with_suffix(".tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump([e.to_dict() for e in entries], f, indent=2, ensure_ascii=False)
+            tmp.replace(filepath)
+        except OSError as e:
+            raise OSError(f"Failed to persist {filepath.name}: {e}") from e
 
     # --- History ---
 
