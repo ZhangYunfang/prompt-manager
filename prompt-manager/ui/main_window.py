@@ -1,8 +1,10 @@
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QMessageBox, QInputDialog, QWidget,
 )
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtCore import Qt
+
+import os
 
 from config import Config
 from storage.data_store import DataStore
@@ -19,7 +21,7 @@ class MainWindow(QMainWindow):
         self._config = config
         self._data_store = data_store
         self.setWindowTitle("提示词编辑管理")
-        self.resize(1100, 650)
+        self.resize(1100, 700)
         self._build_ui()
         self._build_menu()
         self._load_data()

@@ -2,11 +2,17 @@ import sys
 import os
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 
 from config import Config
 from storage.data_store import DataStore
 from ui.main_window import MainWindow
+
+
+def _get_icon_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, "头像图标.ico")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "头像图标.ico")
 
 
 def main():
@@ -15,6 +21,10 @@ def main():
 
     font = QFont("Microsoft YaHei", 10)
     app.setFont(font)
+
+    icon_path = _get_icon_path()
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     config = Config()
     data_store = DataStore(config.data_dir)
