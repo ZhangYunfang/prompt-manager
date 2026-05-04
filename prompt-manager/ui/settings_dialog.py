@@ -1,11 +1,30 @@
 from PySide6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QPushButton,
-    QDialogButtonBox, QVBoxLayout, QLabel, QMessageBox,
+    QDialogButtonBox, QVBoxLayout, QLabel,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 
 from config import Config
 from api.deepseek_client import DeepSeekClient
+
+
+class _TestWorker(QThread):
+    result_signal = Signal(bool, str)
+
+    def __init__(self, api_key: str, base_url: str, model: str):
+        super().__init__()
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+
+    def run(self):
+        client = DeepSeekClient(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            model=self._model,
+        )
+        ok, msg = client.test_connection()
+        self.result_signal.emit(ok, msg)
 
 
 class SettingsDialog(QDialog):
@@ -36,9 +55,9 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(form)
 
-        test_btn = QPushButton("测试连接")
-        test_btn.clicked.connect(self._test_connection)
-        layout.addWidget(test_btn)
+        self._test_btn = QPushButton("测试连接")
+        self._test_btn.clicked.connect(self._test_connection)
+        layout.addWidget(self._test_btn)
 
         self._test_result = QLabel("")
         self._test_result.setStyleSheet("color: gray;")
@@ -55,14 +74,26 @@ class SettingsDialog(QDialog):
         self._model_edit.setText(self._config.model)
 
     def _test_connection(self):
+        api_key = self._api_key_edit.text().strip()
+        if not api_key:
+            self._test_result.setText("请先输入 API Key")
+            self._test_result.setStyleSheet("color: orange;")
+            return
+
+        self._test_btn.setEnabled(False)
         self._test_result.setText("正在测试...")
         self._test_result.setStyleSheet("color: gray;")
-        client = DeepSeekClient(
-            api_key=self._api_key_edit.text().strip(),
+
+        self._worker = _TestWorker(
+            api_key=api_key,
             base_url=self._base_url_edit.text().strip(),
             model=self._model_edit.text().strip(),
         )
-        ok, msg = client.test_connection()
+        self._worker.result_signal.connect(self._on_test_result)
+        self._worker.start()
+
+    def _on_test_result(self, ok: bool, msg: str):
+        self._test_btn.setEnabled(True)
         if ok:
             self._test_result.setText("连接成功")
             self._test_result.setStyleSheet("color: green;")
