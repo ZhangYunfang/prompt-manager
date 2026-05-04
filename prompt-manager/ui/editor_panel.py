@@ -42,15 +42,18 @@ class _TitleWorker(QThread):
         self._content = content
 
     def run(self):
-        client = DeepSeekClient(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            model=self._model,
-        )
-        ok, title = client.generate_title(self._content)
-        if ok and title:
-            self.done_signal.emit(self._entry_id, title.strip()[:12])
-        else:
+        try:
+            client = DeepSeekClient(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                model=self._model,
+            )
+            ok, title = client.generate_title(self._content)
+            if ok and title:
+                self.done_signal.emit(self._entry_id, title.strip()[:12])
+            else:
+                self.done_signal.emit("", "")
+        except Exception:
             self.done_signal.emit("", "")
 
 
@@ -65,15 +68,18 @@ class _PreFetchWorker(QThread):
         self._content = content
 
     def run(self):
-        client = DeepSeekClient(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            model=self._model,
-        )
-        ok, data = client.suggest_tags_and_title(self._content)
-        if ok and data:
-            self.done_signal.emit(data.get("title", ""), data.get("tags", []))
-        else:
+        try:
+            client = DeepSeekClient(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                model=self._model,
+            )
+            ok, data = client.suggest_tags_and_title(self._content)
+            if ok and data:
+                self.done_signal.emit(data.get("title", ""), data.get("tags", []))
+            else:
+                self.done_signal.emit("", [])
+        except Exception:
             self.done_signal.emit("", [])
 
 

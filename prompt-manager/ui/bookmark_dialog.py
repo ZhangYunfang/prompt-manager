@@ -18,14 +18,17 @@ class _TagSuggestWorker(QThread):
         self._content = content
 
     def run(self):
-        client = DeepSeekClient(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            model=self._model,
-        )
-        ok, data = client.suggest_tags_and_title(self._content)
-        title = data.get("title", "") if data else ""
-        tags = data.get("tags", []) if data else []
+        try:
+            client = DeepSeekClient(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                model=self._model,
+            )
+            ok, data = client.suggest_tags_and_title(self._content)
+            title = data.get("title", "") if data else ""
+            tags = data.get("tags", []) if data else []
+        except Exception:
+            ok, title, tags = False, "", []
         self.done_signal.emit(ok, title, tags)
 
 

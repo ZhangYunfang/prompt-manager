@@ -179,7 +179,14 @@ class DeepSeekClient:
         return self._call_fast(TITLE_SYSTEM_PROMPT, content[:500])
 
     def suggest_tags_and_title(self, content: str) -> Tuple[bool, dict]:
-        return self._call_fast(TAG_SUGGEST_SYSTEM_PROMPT, content[:500])
+        ok, result = self._call_fast(TAG_SUGGEST_SYSTEM_PROMPT, content[:500])
+        if not ok or not result:
+            return False, {}
+        try:
+            data = json.loads(result.strip())
+            return True, data
+        except json.JSONDecodeError:
+            return False, {}
 
     def _call_fast(self, system_prompt: str, user_content: str) -> Tuple[bool, str]:
         if not self._api_key:
