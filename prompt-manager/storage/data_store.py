@@ -50,6 +50,20 @@ class DataStore:
         self._history = [e for e in self._history if e.id != entry_id]
         self._write_entries(self._history_file, self._history)
 
+    def update_history(self, entry_id: str, content: str = "", title: str = ""):
+        for entry in self._history:
+            if entry.id == entry_id:
+                entry.update(content=content, title=title)
+                self._write_entries(self._history_file, self._history)
+                return entry
+        return None
+
+    def get_history_entry(self, entry_id: str):
+        for entry in self._history:
+            if entry.id == entry_id:
+                return entry
+        return None
+
     def search_history(self, keyword: str) -> List[HistoryEntry]:
         kw = keyword.lower()
         return [e for e in self._history if kw in e.content.lower()]

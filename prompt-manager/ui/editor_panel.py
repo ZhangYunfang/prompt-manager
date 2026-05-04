@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
     QPushButton, QLabel, QMessageBox, QApplication,
 )
-from PySide6.QtCore import Signal, QThread
+from PySide6.QtCore import Signal, QThread, QTimer
 from PySide6.QtGui import QFont
 
 from api.deepseek_client import DeepSeekClient
@@ -10,14 +10,14 @@ from storage.models import HistoryEntry
 
 
 class _AIWorker(QThread):
-    result_signal = Signal(bool, str)
+    result_signal = Signal(str, bool, str)
 
-    def __init__(self, api_key: str, base_url: str, model: str, action: str, content: str):
+    def __init__(self, api_key: str, base_url: str, model: str, task: str, content: str):
         super().__init__()
         self._api_key = api_key
         self._base_url = base_url
         self._model = model
-        self._action = action
+        self._task = task
         self._content = content
 
     def run(self):
@@ -26,31 +26,50 @@ class _AIWorker(QThread):
             base_url=self._base_url,
             model=self._model,
         )
-        if self._action == "format_cleanup":
+        if self._task == "format_cleanup":
             ok, result = client.format_cleanup(self._content)
-        else:
+        elif self._task == "optimize":
             ok, result = client.optimize(self._content)
-        self.result_signal.emit(ok, result)
+        elif self._task == "generate_title":
+            ok, result = client.generate_title(self._content)
+        else:
+            ok, result = False, ""
+        self.result_signal.emit(self._task, ok, result)
 
 
 class EditorPanel(QWidget):
-    history_saved = Signal(HistoryEntry)
+    history_created = Signal(HistoryEntry)
+    history_updated = Signal(str, str, str)
     bookmark_requested = Signal(str)
 
     def __init__(self, config_getter, parent=None):
         super().__init__(parent)
         self._config_getter = config_getter
-        self._modified = False
+        self._current_history_id = ""
         self._build_ui()
+
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(1500)
+        self._save_timer.timeout.connect(self._auto_save)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(4)
 
+        header_row = QHBoxLayout()
         header = QLabel("编辑区")
         header.setStyleSheet("font-weight: bold; font-size: 13px; color: #333;")
-        layout.addWidget(header)
+        header_row.addWidget(header)
+        header_row.addStretch()
+
+        clear_btn = QPushButton("清除")
+        clear_btn.setFixedWidth(50)
+        clear_btn.setToolTip("清除内容，下次输入作为新提示词")
+        clear_btn.clicked.connect(self._on_clear)
+        header_row.addWidget(clear_btn)
+        layout.addLayout(header_row)
 
         self._editor = QPlainTextEdit()
         self._editor.setPlaceholderText("在这里输入提示词...")
@@ -106,16 +125,55 @@ class EditorPanel(QWidget):
     def _on_text_changed(self):
         text = self._editor.toPlainText()
         self._status.setText(f"字数: {len(text)}")
-        self._modified = True
+        self._save_timer.start()
+
+    def _auto_save(self):
+        content = self._editor.toPlainText().strip()
+        if not content:
+            return
+
+        if self._current_history_id:
+            self.history_updated.emit(self._current_history_id, content, "")
+        else:
+            entry = HistoryEntry.new(content)
+            self._current_history_id = entry.id
+            self.history_created.emit(entry)
+            self._request_title(entry.id, content)
+
+    def _request_title(self, entry_id: str, content: str):
+        config = self._config_getter()
+        if not config.api_key:
+            return
+        worker = _AIWorker(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            model=config.model,
+            task="generate_title",
+            content=content,
+        )
+        worker.result_signal.connect(self._on_title_ready)
+        worker.start()
+
+    def _on_title_ready(self, task: str, ok: bool, result: str):
+        if task != "generate_title" or not ok or not result:
+            return
+        title = result.strip()[:12]
+        if title:
+            self.history_updated.emit(self._current_history_id, "", title)
+
+    def _on_clear(self):
+        self._editor.clear()
+        self._result_area.clear()
+        self._copy_btn.setEnabled(False)
+        self._current_history_id = ""
 
     def _on_bookmark(self):
         content = self._editor.toPlainText().strip()
         if not content:
             QMessageBox.information(self, "提示", "没有内容可以收藏")
             return
-        entry = HistoryEntry.new(content)
-        self.history_saved.emit(entry)
-        self._modified = False
+        self._save_timer.stop()
+        self._auto_save()
         self.bookmark_requested.emit(content)
 
     def _run_ai(self, action: str):
@@ -130,22 +188,28 @@ class EditorPanel(QWidget):
             QMessageBox.warning(self, "提示", "请先在设置中配置 API Key")
             return
 
+        self._save_timer.stop()
+        self._auto_save()
+
         self._format_btn.setEnabled(False)
         self._optimize_btn.setEnabled(False)
         self._copy_btn.setEnabled(False)
         self._status.setText("正在调用 AI...")
 
-        self._worker = _AIWorker(
+        worker = _AIWorker(
             api_key=api_key,
             base_url=config.base_url,
             model=config.model,
-            action=action,
+            task=action,
             content=content,
         )
-        self._worker.result_signal.connect(self._on_ai_result)
-        self._worker.start()
+        worker.result_signal.connect(self._on_ai_result)
+        worker.start()
 
-    def _on_ai_result(self, ok: bool, result: str):
+    def _on_ai_result(self, task: str, ok: bool, result: str):
+        if task == "generate_title":
+            return
+
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
         self._status.setText(f"字数: {len(self._editor.toPlainText())}")
@@ -163,7 +227,7 @@ class EditorPanel(QWidget):
 
     def set_content(self, text: str):
         self._editor.setPlainText(text)
-        self._modified = True
+        self._save_timer.start()
 
     def get_content(self) -> str:
         return self._editor.toPlainText()

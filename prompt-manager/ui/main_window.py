@@ -1,10 +1,10 @@
+import os
+
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QMessageBox, QInputDialog, QWidget,
 )
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtCore import Qt
-
-import os
 
 from config import Config
 from storage.data_store import DataStore
@@ -12,6 +12,7 @@ from storage.models import HistoryEntry, BookmarkEntry
 from .editor_panel import EditorPanel
 from .history_panel import HistoryPanel
 from .bookmark_panel import BookmarkPanel
+from .bookmark_dialog import BookmarkDialog
 from .settings_dialog import SettingsDialog
 
 
@@ -46,8 +47,11 @@ class MainWindow(QMainWindow):
 
         self._history_panel.entry_selected.connect(self._on_history_selected)
         self._history_panel.entry_deleted.connect(self._on_history_deleted)
-        self._editor_panel.history_saved.connect(self._on_history_saved)
+
+        self._editor_panel.history_created.connect(self._on_history_created)
+        self._editor_panel.history_updated.connect(self._on_history_updated)
         self._editor_panel.bookmark_requested.connect(self._on_add_bookmark)
+
         self._bookmark_panel.entry_selected.connect(self._on_bookmark_selected)
         self._bookmark_panel.entry_deleted.connect(self._on_bookmark_deleted)
 
@@ -72,25 +76,28 @@ class MainWindow(QMainWindow):
         self._history_panel.set_entries(self._data_store.get_history())
         self._bookmark_panel.set_entries(self._data_store.get_bookmarks())
 
-    def _on_history_saved(self, entry: HistoryEntry):
+    def _on_history_created(self, entry: HistoryEntry):
         self._data_store.add_history(entry)
         self._history_panel.add_entry(entry)
+
+    def _on_history_updated(self, entry_id: str, content: str, title: str):
+        entry = self._data_store.update_history(entry_id, content=content, title=title)
+        if entry:
+            self._history_panel.update_entry(entry_id, content=content, title=title)
 
     def _on_history_selected(self, entry: HistoryEntry):
         self._editor_panel.set_content(entry.content)
 
     def _on_add_bookmark(self, content: str):
-        tags_str, ok = QInputDialog.getText(
-            self, "添加收藏", "输入标签（用逗号分隔，可选）:"
-        )
-        if not ok:
+        dialog = BookmarkDialog(self._get_config, content, self)
+        if dialog.exec_() != BookmarkDialog.DialogCode.Accepted:
             return
-        tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str.strip() else []
 
+        title, tags = dialog.get_result()
         entry = BookmarkEntry.new(
             content=content,
-            source_history_id="",
             tags=tags,
+            title=title,
         )
         self._data_store.add_bookmark(entry)
         self._bookmark_panel.add_entry(entry)

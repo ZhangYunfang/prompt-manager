@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QListWidget,
-    QListWidgetItem, QLabel, QMenu, QMessageBox,
+    QListWidgetItem, QLabel, QMenu,
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal, Qt
@@ -37,6 +37,8 @@ class HistoryPanel(QWidget):
         layout.addWidget(self._list)
 
     def add_entry(self, entry: HistoryEntry):
+        if entry.id in {e.id for e in self._all_entries}:
+            return
         self._all_entries.insert(0, entry)
         self._prepend_item(entry)
 
@@ -44,26 +46,45 @@ class HistoryPanel(QWidget):
         self._all_entries = list(entries)
         self._rebuild_list(entries)
 
+    def update_entry(self, entry_id: str, content: str = "", title: str = ""):
+        for i, entry in enumerate(self._all_entries):
+            if entry.id == entry_id:
+                if content:
+                    entry.content = content
+                if title:
+                    entry.title = title
+                self._refresh_item(entry_id, entry)
+                break
+
     def _prepend_item(self, entry: HistoryEntry):
-        preview = self._format_preview(entry)
-        item = QListWidgetItem(preview)
-        item.setData(Qt.UserRole, entry.id)
-        item.setToolTip(entry.content[:500])
+        item = self._make_list_item(entry)
         self._list.insertItem(0, item)
 
     def _rebuild_list(self, entries: list[HistoryEntry]):
         self._list.clear()
         for entry in entries:
-            preview = self._format_preview(entry)
-            item = QListWidgetItem(preview)
-            item.setData(Qt.UserRole, entry.id)
-            item.setToolTip(entry.content[:500])
+            item = self._make_list_item(entry)
             self._list.addItem(item)
 
-    def _format_preview(self, entry: HistoryEntry) -> str:
-        dt = entry.created_at[:16].replace("T", " ")
-        line = entry.content.split("\n")[0][:60]
-        return f"{dt}  {line}"
+    def _refresh_item(self, entry_id: str, entry: HistoryEntry):
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            if item.data(Qt.UserRole) == entry_id:
+                item.setText(self._format_label(entry))
+                item.setToolTip(entry.content[:500])
+                break
+
+    def _make_list_item(self, entry: HistoryEntry) -> QListWidgetItem:
+        item = QListWidgetItem(self._format_label(entry))
+        item.setData(Qt.UserRole, entry.id)
+        item.setToolTip(entry.content[:500])
+        return item
+
+    def _format_label(self, entry: HistoryEntry) -> str:
+        heading = entry.title or entry.content.split("\n")[0][:30]
+        dt = entry.updated_at or entry.created_at
+        dt = dt[:16].replace("T", " ")
+        return f"{heading}\n{dt}"
 
     def _on_search(self, keyword: str):
         if not keyword.strip():
@@ -87,7 +108,7 @@ class HistoryPanel(QWidget):
         entry_id = item.data(Qt.UserRole)
         menu = QMenu(self)
         delete_action = QAction("删除", self)
-        delete_action.triggered.connect(lambda: self._delete_entry(entry_id))
+        delete_action.triggered.connect(lambda eid=entry_id: self._delete_entry(eid))
         menu.addAction(delete_action)
         menu.exec_(self._list.viewport().mapToGlobal(pos))
 

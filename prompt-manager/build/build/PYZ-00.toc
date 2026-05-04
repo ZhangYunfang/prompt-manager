@@ -1311,6 +1311,10 @@
    'D:\\应用数据\\桌面\\软件\\实用小工具\\Claude '
    'Code实践\\提示词编辑管理\\prompt-manager\\ui\\__init__.py',
    'PYMODULE'),
+  ('ui.bookmark_dialog',
+   'D:\\应用数据\\桌面\\软件\\实用小工具\\Claude '
+   'Code实践\\提示词编辑管理\\prompt-manager\\ui\\bookmark_dialog.py',
+   'PYMODULE'),
   ('ui.bookmark_panel',
    'D:\\应用数据\\桌面\\软件\\实用小工具\\Claude '
    'Code实践\\提示词编辑管理\\prompt-manager\\ui\\bookmark_panel.py',

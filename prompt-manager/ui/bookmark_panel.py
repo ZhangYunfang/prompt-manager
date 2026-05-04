@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QLabel, QMenu, QHBoxLayout,
-    QApplication, QInputDialog, QMessageBox,
+    QApplication,
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal, Qt
@@ -52,8 +52,9 @@ class BookmarkPanel(QWidget):
 
     def _make_item(self, entry: BookmarkEntry) -> QListWidgetItem:
         tags = "  ".join(f"[{t}]" for t in entry.tags) if entry.tags else ""
-        preview = entry.content.split("\n")[0][:40]
-        text = f"{tags}  {preview}" if tags else preview
+        heading = entry.title or entry.content.split("\n")[0][:30]
+        text = f"{tags}\n{heading}" if tags else heading
+
         item = QListWidgetItem()
         item.setData(Qt.UserRole, entry.id)
         item.setToolTip(entry.content[:500])
@@ -94,7 +95,7 @@ class BookmarkPanel(QWidget):
         entry_id = item.data(Qt.UserRole)
         menu = QMenu(self)
         delete_action = QAction("取消收藏", self)
-        delete_action.triggered.connect(lambda: self._delete_entry(entry_id))
+        delete_action.triggered.connect(lambda eid=entry_id: self._delete_entry(eid))
         menu.addAction(delete_action)
         menu.exec_(self._list.viewport().mapToGlobal(pos))
 

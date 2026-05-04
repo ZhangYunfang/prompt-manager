@@ -1,4 +1,5 @@
-from typing import Optional, Tuple
+import json
+from typing import Tuple
 import requests
 
 
@@ -68,3 +69,45 @@ class DeepSeekClient:
 
     def test_connection(self) -> Tuple[bool, str]:
         return self._call(FORMAT_SYSTEM_PROMPT, "test")
+
+    def _call_fast(self, system_prompt: str, user_content: str) -> Tuple[bool, str]:
+        if not self._api_key:
+            return False, "请先在设置中配置 API Key"
+        try:
+            resp = requests.post(
+                f"{self._base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self._model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": FAST_TEMPERATURE,
+                },
+                timeout=FAST_TIMEOUT,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            result = data["choices"][0]["message"]["content"]
+            return True, result
+        except requests.exceptions.Timeout:
+            return False, ""
+        except Exception:
+            return False, ""
+
+    def generate_title(self, content: str) -> Tuple[bool, str]:
+        return self._call_fast(TITLE_SYSTEM_PROMPT, content)
+
+    def suggest_tags_and_title(self, content: str) -> Tuple[bool, dict]:
+        ok, result = self._call_fast(TAG_SUGGEST_SYSTEM_PROMPT, content)
+        if not ok or not result:
+            return False, {}
+        try:
+            data = json.loads(result.strip())
+            return True, data
+        except json.JSONDecodeError:
+            return False, {}
