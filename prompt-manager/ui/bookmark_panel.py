@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QMenu, QHBoxLayout,
     QApplication,
 )
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QPalette, QColor
 from PySide6.QtCore import Signal, Qt
 
 from storage.models import BookmarkEntry
@@ -61,19 +61,26 @@ class BookmarkPanel(QWidget):
         item.setToolTip(entry.content[:500])
 
         widget = QWidget()
-        widget.setStyleSheet("background: #f9f9f9; border-bottom: 1px solid #e0e0e0;")
+        widget.setAutoFillBackground(True)
+        pal = widget.palette()
+        pal.setColor(QPalette.Window, QColor("#f5f5f5"))
+        pal.setColor(QPalette.WindowText, QColor("#111111"))
+        pal.setColor(QPalette.Button, QColor("#e8e8e8"))
+        pal.setColor(QPalette.ButtonText, QColor("#333333"))
+        widget.setPalette(pal)
+
         h = QHBoxLayout(widget)
         h.setContentsMargins(6, 4, 6, 4)
         h.setSpacing(6)
 
         label = QLabel(text)
-        label.setWordWrap(False)
-        label.setStyleSheet("color: #111; font-size: 12px; background: transparent; border: none;")
+        label.setPalette(pal)
+        label.setAutoFillBackground(False)
         h.addWidget(label, 1)
 
         copy_btn = QPushButton("复制")
         copy_btn.setFixedSize(44, 22)
-        copy_btn.setStyleSheet("QPushButton { font-size: 11px; padding: 0px 4px; color: #333; background: #e8e8e8; border: 1px solid #ccc; border-radius: 3px; } QPushButton:hover { background: #d0d0d0; }")
+        copy_btn.setPalette(pal)
         copy_btn.clicked.connect(lambda checked=False, e=entry: self._copy_entry(e))
         h.addWidget(copy_btn)
 
