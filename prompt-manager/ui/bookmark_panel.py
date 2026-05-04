@@ -67,6 +67,7 @@ class BookmarkPanel(QWidget):
 
         label = QLabel(text)
         label.setWordWrap(False)
+        label.setStyleSheet("color: #222; font-size: 12px;")
         h.addWidget(label, 1)
 
         copy_btn = QPushButton("复制")

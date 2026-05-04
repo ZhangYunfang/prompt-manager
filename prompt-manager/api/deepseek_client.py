@@ -1,6 +1,4 @@
 import json
-import queue
-import threading
 from typing import Tuple
 import requests
 
@@ -31,7 +29,6 @@ TAG_SUGGEST_SYSTEM_PROMPT = (
 )
 
 TIMEOUT = 30
-FAST_TEMPERATURE = 0.0
 FAST_TIMEOUT = 10
 
 
@@ -40,6 +37,7 @@ class StreamResult:
         self.text = ""
         self.done = False
         self.error = ""
+        import threading
         self._lock = threading.Lock()
 
     def update(self, text: str):
@@ -93,6 +91,7 @@ class DeepSeekClient:
                         {"role": "user", "content": user_content},
                     ],
                     "temperature": 0.3,
+                    "thinking": {"type": "disabled"},
                 },
                 timeout=TIMEOUT,
             )
@@ -111,7 +110,7 @@ class DeepSeekClient:
         except Exception as e:
             return False, f"未知错误: {e}"
 
-    def stream_call(self, system_prompt: str, user_content: str, result: StreamResult):
+    def stream_call(self, system_prompt: str, user_content: str, result: StreamResult, thinking: bool = False):
         if not self._api_key:
             result.finish("请先在设置中配置 API Key")
             return
@@ -124,6 +123,7 @@ class DeepSeekClient:
                 },
                 json={
                     "model": self._model,
+                    "thinking": {"type": "enabled"} if thinking else {"type": "disabled"},
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content},
@@ -149,10 +149,6 @@ class DeepSeekClient:
                         if chunk is not None:
                             full += chunk
                             result.update(full)
-                        elif _parse_sse_line(line) is None and line.startswith("data:"):
-                            data = line[5:].strip()
-                            if data == "[DONE]" or not data:
-                                continue
             result.update(full)
             if not full:
                 result.finish("API 返回空结果")
@@ -179,6 +175,12 @@ class DeepSeekClient:
     def test_connection(self) -> Tuple[bool, str]:
         return self._call(FORMAT_SYSTEM_PROMPT, "test")
 
+    def generate_title(self, content: str) -> Tuple[bool, str]:
+        return self._call_fast(TITLE_SYSTEM_PROMPT, content[:500])
+
+    def suggest_tags_and_title(self, content: str) -> Tuple[bool, dict]:
+        return self._call_fast(TAG_SUGGEST_SYSTEM_PROMPT, content[:500])
+
     def _call_fast(self, system_prompt: str, user_content: str) -> Tuple[bool, str]:
         if not self._api_key:
             return False, "请先在设置中配置 API Key"
@@ -196,27 +198,14 @@ class DeepSeekClient:
                         {"role": "user", "content": user_content},
                     ],
                     "temperature": 0.0,
+                    "thinking": {"type": "disabled"},
                 },
                 timeout=FAST_TIMEOUT,
             )
             resp.raise_for_status()
             data = resp.json()
-            result = data["choices"][0]["message"]["content"]
-            return True, result
+            return True, data["choices"][0]["message"]["content"]
         except requests.exceptions.Timeout:
             return False, ""
         except Exception:
             return False, ""
-
-    def generate_title(self, content: str) -> Tuple[bool, str]:
-        return self._call_fast(TITLE_SYSTEM_PROMPT, content[:500])
-
-    def suggest_tags_and_title(self, content: str) -> Tuple[bool, dict]:
-        ok, result = self._call_fast(TAG_SUGGEST_SYSTEM_PROMPT, content[:500])
-        if not ok or not result:
-            return False, {}
-        try:
-            data = json.loads(result.strip())
-            return True, data
-        except json.JSONDecodeError:
-            return False, {}

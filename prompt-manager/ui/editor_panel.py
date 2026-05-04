@@ -27,10 +27,7 @@ class _StreamWorker(QThread):
             model=self._model,
         )
         system_prompt = FORMAT_SYSTEM_PROMPT if self._action == "format_cleanup" else OPTIMIZE_SYSTEM_PROMPT
-        content = self._content
-        if self._thinking:
-            content = "请仔细思考，一步步推理后再给出最终结果：\n" + content
-        client.stream_call(system_prompt, content, self.result)
+        client.stream_call(system_prompt, self._content, self.result, thinking=self._thinking)
 
 
 class _TitleWorker(QThread):
