@@ -1,14 +1,14 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QCheckBox, QPushButton, QDialogButtonBox, QGroupBox, QScrollArea, QWidget,
+    QCheckBox, QPushButton, QDialogButtonBox, QGroupBox,
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import QThread, Signal
 
 from api.deepseek_client import DeepSeekClient
 
 
 class _TagSuggestWorker(QThread):
-    result_signal = Signal(bool, str, list)
+    done_signal = Signal(bool, str, object)
 
     def __init__(self, api_key: str, base_url: str, model: str, content: str):
         super().__init__()
@@ -26,7 +26,7 @@ class _TagSuggestWorker(QThread):
         ok, data = client.suggest_tags_and_title(self._content)
         title = data.get("title", "") if data else ""
         tags = data.get("tags", []) if data else []
-        self.result_signal.emit(ok, title, tags)
+        self.done_signal.emit(ok, title, tags)
 
 
 class BookmarkDialog(QDialog):
@@ -36,6 +36,7 @@ class BookmarkDialog(QDialog):
         self._content = content
         self._tags = []
         self._title = ""
+        self._worker = None
         self.setWindowTitle("添加收藏")
         self.setMinimumWidth(400)
         self._build_ui()
@@ -44,16 +45,12 @@ class BookmarkDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout(self)
 
-        title_label = QLabel("标题:")
-        layout.addWidget(title_label)
-
+        layout.addWidget(QLabel("标题:"))
         self._title_edit = QLineEdit()
         self._title_edit.setPlaceholderText("正在生成...")
         layout.addWidget(self._title_edit)
 
-        tags_label = QLabel("标签:")
-        layout.addWidget(tags_label)
-
+        layout.addWidget(QLabel("标签:"))
         self._tags_group = QGroupBox("AI 建议标签")
         self._tags_layout = QVBoxLayout(self._tags_group)
         self._status_label = QLabel("正在请求 AI 建议...")
@@ -61,9 +58,7 @@ class BookmarkDialog(QDialog):
         self._tags_layout.addWidget(self._status_label)
         layout.addWidget(self._tags_group)
 
-        custom_label = QLabel("自定义标签 (逗号分隔):")
-        layout.addWidget(custom_label)
-
+        layout.addWidget(QLabel("自定义标签 (逗号分隔):"))
         self._custom_tags = QLineEdit()
         self._custom_tags.setPlaceholderText("例如: 翻译, 代码, 总结")
         layout.addWidget(self._custom_tags)
@@ -86,22 +81,22 @@ class BookmarkDialog(QDialog):
             model=config.model,
             content=self._content,
         )
-        self._worker.result_signal.connect(self._on_suggestions_ready)
+        self._worker.done_signal.connect(self._on_suggestions_ready)
         self._worker.start()
 
     def _on_suggestions_ready(self, ok: bool, title: str, tags: list):
-        if ok:
+        if ok and title:
             self._title = title
             self._title_edit.setText(title)
-            self._suggested_tags = tags
             self._checkboxes = []
 
             self._status_label.hide()
             for tag in tags:
-                cb = QCheckBox(tag, self._tags_group)
-                cb.setChecked(True)
-                self._checkboxes.append(cb)
-                self._tags_layout.addWidget(cb)
+                if isinstance(tag, str):
+                    cb = QCheckBox(tag, self._tags_group)
+                    cb.setChecked(True)
+                    self._checkboxes.append(cb)
+                    self._tags_layout.addWidget(cb)
         else:
             self._status_label.setText("AI 建议获取失败，请手动输入")
             self._status_label.setStyleSheet("color: red;")

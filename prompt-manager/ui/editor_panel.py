@@ -9,15 +9,16 @@ from api.deepseek_client import DeepSeekClient
 from storage.models import HistoryEntry
 
 
-class _AIWorker(QThread):
-    result_signal = Signal(str, bool, str)
+class _StreamWorker(QThread):
+    chunk_signal = Signal(str)
+    done_signal = Signal(bool, str)
 
-    def __init__(self, api_key: str, base_url: str, model: str, task: str, content: str):
+    def __init__(self, api_key: str, base_url: str, model: str, action: str, content: str):
         super().__init__()
         self._api_key = api_key
         self._base_url = base_url
         self._model = model
-        self._task = task
+        self._action = action
         self._content = content
 
     def run(self):
@@ -26,15 +27,35 @@ class _AIWorker(QThread):
             base_url=self._base_url,
             model=self._model,
         )
-        if self._task == "format_cleanup":
-            ok, result = client.format_cleanup(self._content)
-        elif self._task == "optimize":
-            ok, result = client.optimize(self._content)
-        elif self._task == "generate_title":
-            ok, result = client.generate_title(self._content)
+        if self._action == "format_cleanup":
+            ok, _ = client.format_cleanup_stream(self._content, self.chunk_signal.emit)
         else:
-            ok, result = False, ""
-        self.result_signal.emit(self._task, ok, result)
+            ok, _ = client.optimize_stream(self._content, self.chunk_signal.emit)
+        self.done_signal.emit(ok, "")
+
+
+class _TitleWorker(QThread):
+    done_signal = Signal(str, str)
+
+    def __init__(self, api_key: str, base_url: str, model: str, entry_id: str, content: str):
+        super().__init__()
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+        self._entry_id = entry_id
+        self._content = content
+
+    def run(self):
+        client = DeepSeekClient(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            model=self._model,
+        )
+        ok, title = client.generate_title(self._content)
+        if ok and title:
+            self.done_signal.emit(self._entry_id, title.strip()[:12])
+        else:
+            self.done_signal.emit("", "")
 
 
 class EditorPanel(QWidget):
@@ -47,7 +68,7 @@ class EditorPanel(QWidget):
         self._config_getter = config_getter
         self._current_history_id = ""
         self._loading = False
-        self._ai_worker = None
+        self._stream_worker = None
         self._title_worker = None
         self._build_ui()
 
@@ -154,25 +175,20 @@ class EditorPanel(QWidget):
         config = self._config_getter()
         if not config.api_key:
             return
-        if self._title_worker is not None and self._title_worker.isRunning():
-            return
-        self._title_worker = _AIWorker(
+        self._title_worker = _TitleWorker(
             api_key=config.api_key,
             base_url=config.base_url,
             model=config.model,
-            task="generate_title",
+            entry_id=entry_id,
             content=content,
         )
-        self._title_worker.result_signal.connect(self._on_title_ready)
+        self._title_worker.done_signal.connect(self._on_title_ready)
         self._title_worker.finished.connect(lambda: setattr(self, '_title_worker', None))
         self._title_worker.start()
 
-    def _on_title_ready(self, task: str, ok: bool, result: str):
-        if task != "generate_title" or not ok or not result:
-            return
-        title = result.strip()[:12]
-        if title and self._current_history_id:
-            self.history_updated.emit(self._current_history_id, "", title)
+    def _on_title_ready(self, entry_id: str, title: str):
+        if entry_id and title:
+            self.history_updated.emit(entry_id, "", title)
 
     def _on_clear(self):
         self._editor.clear()
@@ -207,30 +223,31 @@ class EditorPanel(QWidget):
         self._copy_btn.setEnabled(False)
         self._status.setText("正在调用 AI...")
 
-        self._ai_worker = _AIWorker(
+        self._stream_worker = _StreamWorker(
             api_key=api_key,
             base_url=config.base_url,
             model=config.model,
-            task=action,
+            action=action,
             content=content,
         )
-        self._ai_worker.result_signal.connect(self._on_ai_result)
-        self._ai_worker.finished.connect(lambda: setattr(self, '_ai_worker', None))
-        self._ai_worker.start()
+        self._stream_worker.chunk_signal.connect(self._on_stream_chunk)
+        self._stream_worker.done_signal.connect(self._on_stream_done)
+        self._stream_worker.finished.connect(lambda: setattr(self, '_stream_worker', None))
+        self._stream_worker.start()
 
-    def _on_ai_result(self, task: str, ok: bool, result: str):
-        if task == "generate_title":
-            return
+    def _on_stream_chunk(self, text: str):
+        self._result_area.setPlainText(text)
 
+    def _on_stream_done(self, ok: bool, _: str):
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
         self._status.setText(f"字数: {len(self._editor.toPlainText())}")
 
         if ok:
-            self._result_area.setPlainText(result)
             self._copy_btn.setEnabled(True)
         else:
-            QMessageBox.critical(self, "错误", result)
+            self._copy_btn.setEnabled(False)
+            QMessageBox.critical(self, "错误", "请求失败，请检查网络或 API 设置")
 
     def _copy_result(self):
         text = self._result_area.toPlainText()

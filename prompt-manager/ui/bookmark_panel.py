@@ -95,7 +95,7 @@ class BookmarkPanel(QWidget):
         entry_id = item.data(Qt.UserRole)
         menu = QMenu(self)
         delete_action = QAction("取消收藏", self)
-        delete_action.triggered.connect(lambda eid=entry_id: self._delete_entry(eid))
+        delete_action.triggered.connect(lambda checked=False, eid=entry_id: self._delete_entry(eid))
         menu.addAction(delete_action)
         menu.exec_(self._list.viewport().mapToGlobal(pos))
 
