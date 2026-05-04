@@ -1,7 +1,7 @@
 import os
 
 from PySide6.QtWidgets import (
-    QMainWindow, QSplitter, QMessageBox, QInputDialog, QWidget,
+    QMainWindow, QSplitter, QMessageBox, QWidget,
 )
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtCore import Qt
@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
 
         self._editor_panel.history_created.connect(self._on_history_created)
         self._editor_panel.history_updated.connect(self._on_history_updated)
-        self._editor_panel.bookmark_requested.connect(self._on_add_bookmark)
+        self._editor_panel.bookmark_requested.connect(self._on_bookmark_requested)
 
         self._bookmark_panel.entry_selected.connect(self._on_bookmark_selected)
         self._bookmark_panel.entry_deleted.connect(self._on_bookmark_deleted)
@@ -88,19 +88,27 @@ class MainWindow(QMainWindow):
     def _on_history_selected(self, entry: HistoryEntry):
         self._editor_panel.set_content(entry.content)
 
-    def _on_add_bookmark(self, content: str):
-        dialog = BookmarkDialog(self._get_config, content, self)
-        if dialog.exec_() != BookmarkDialog.DialogCode.Accepted:
-            return
-
-        title, tags = dialog.get_result()
-        entry = BookmarkEntry.new(
-            content=content,
-            tags=tags,
-            title=title,
-        )
-        self._data_store.add_bookmark(entry)
-        self._bookmark_panel.add_entry(entry)
+    def _on_bookmark_requested(self, content: str, cached_title: str, cached_tags: list):
+        if cached_title or cached_tags:
+            entry = BookmarkEntry.new(
+                content=content,
+                tags=cached_tags,
+                title=cached_title,
+            )
+            self._data_store.add_bookmark(entry)
+            self._bookmark_panel.add_entry(entry)
+        else:
+            dialog = BookmarkDialog(self._get_config, content, self)
+            if dialog.exec_() != BookmarkDialog.DialogCode.Accepted:
+                return
+            title, tags = dialog.get_result()
+            entry = BookmarkEntry.new(
+                content=content,
+                tags=tags,
+                title=title,
+            )
+            self._data_store.add_bookmark(entry)
+            self._bookmark_panel.add_entry(entry)
 
     def _on_bookmark_selected(self, entry: BookmarkEntry):
         self._editor_panel.set_content(entry.content)

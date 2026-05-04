@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
-    QPushButton, QLabel, QMessageBox, QApplication,
+    QPushButton, QLabel, QMessageBox, QApplication, QCheckBox,
 )
-from PySide6.QtCore import Signal, QThread
+from PySide6.QtCore import Signal, QThread, QTimer
 from PySide6.QtGui import QFont
 
 from api.deepseek_client import DeepSeekClient
@@ -13,13 +13,14 @@ class _StreamWorker(QThread):
     chunk_signal = Signal(str)
     done_signal = Signal(bool, str)
 
-    def __init__(self, api_key: str, base_url: str, model: str, action: str, content: str):
+    def __init__(self, api_key: str, base_url: str, model: str, action: str, content: str, thinking: bool):
         super().__init__()
         self._api_key = api_key
         self._base_url = base_url
         self._model = model
         self._action = action
         self._content = content
+        self._thinking = thinking
 
     def run(self):
         client = DeepSeekClient(
@@ -27,11 +28,25 @@ class _StreamWorker(QThread):
             base_url=self._base_url,
             model=self._model,
         )
-        if self._action == "format_cleanup":
-            ok, _ = client.format_cleanup_stream(self._content, self.chunk_signal.emit)
-        else:
-            ok, _ = client.optimize_stream(self._content, self.chunk_signal.emit)
-        self.done_signal.emit(ok, "")
+        action_map = {
+            "format_cleanup": (client.format_cleanup_stream, client.format_cleanup),
+            "optimize": (client.optimize_stream, client.optimize),
+        }
+        stream_fn, fallback_fn = action_map.get(self._action, (None, None))
+        if not stream_fn:
+            self.done_signal.emit(False, "未知操作")
+            return
+
+        content = self._content
+        if self._thinking:
+            content = "请仔细思考，一步步推理后再给出最终结果：\n" + content
+
+        ok, result = stream_fn(content, self.chunk_signal.emit)
+        if not ok or not result:
+            ok, result = fallback_fn(content)
+            if ok:
+                self.chunk_signal.emit(result)
+        self.done_signal.emit(ok, "" if ok else result)
 
 
 class _TitleWorker(QThread):
@@ -58,10 +73,33 @@ class _TitleWorker(QThread):
             self.done_signal.emit("", "")
 
 
+class _PreFetchWorker(QThread):
+    done_signal = Signal(str, object)
+
+    def __init__(self, api_key: str, base_url: str, model: str, content: str):
+        super().__init__()
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+        self._content = content
+
+    def run(self):
+        client = DeepSeekClient(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            model=self._model,
+        )
+        ok, data = client.suggest_tags_and_title(self._content)
+        if ok and data:
+            self.done_signal.emit(data.get("title", ""), data.get("tags", []))
+        else:
+            self.done_signal.emit("", [])
+
+
 class EditorPanel(QWidget):
     history_created = Signal(HistoryEntry)
     history_updated = Signal(str, str, str)
-    bookmark_requested = Signal(str)
+    bookmark_requested = Signal(str, str, object)
 
     def __init__(self, config_getter, parent=None):
         super().__init__(parent)
@@ -70,7 +108,16 @@ class EditorPanel(QWidget):
         self._loading = False
         self._stream_worker = None
         self._title_worker = None
+        self._prefetch_worker = None
+        self._cached_title = ""
+        self._cached_tags = []
+        self._cached_for_content = ""
         self._build_ui()
+
+        self._prefetch_timer = QTimer(self)
+        self._prefetch_timer.setSingleShot(True)
+        self._prefetch_timer.setInterval(2000)
+        self._prefetch_timer.timeout.connect(self._prefetch)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -98,6 +145,10 @@ class EditorPanel(QWidget):
 
         btn_layout = QHBoxLayout()
 
+        self._thinking_cb = QCheckBox("深度思考")
+        self._thinking_cb.setToolTip("开启后 AI 会更仔细地推理，但耗时更长")
+        btn_layout.addWidget(self._thinking_cb)
+
         self._format_btn = QPushButton("整理格式")
         self._format_btn.setToolTip("修正错字、标点、空格和换行")
         self._format_btn.clicked.connect(lambda: self._run_ai("format_cleanup"))
@@ -109,7 +160,6 @@ class EditorPanel(QWidget):
         btn_layout.addWidget(self._optimize_btn)
 
         self._save_btn = QPushButton("保存")
-        self._save_btn.setToolTip("保存当前内容到历史记录")
         self._save_btn.clicked.connect(self._manual_save)
         btn_layout.addWidget(self._save_btn)
 
@@ -151,6 +201,31 @@ class EditorPanel(QWidget):
             return
         text = self._editor.toPlainText()
         self._status.setText(f"字数: {len(text)}")
+        if len(text.strip()) > 20:
+            self._prefetch_timer.start()
+
+    def _prefetch(self):
+        content = self._editor.toPlainText().strip()
+        if len(content) < 20:
+            return
+        if content == self._cached_for_content:
+            return
+        config = self._config_getter()
+        if not config.api_key:
+            return
+        self._prefetch_worker = _PreFetchWorker(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            model=config.model,
+            content=content,
+        )
+        self._prefetch_worker.done_signal.connect(self._on_prefetch_ready)
+        self._prefetch_worker.start()
+
+    def _on_prefetch_ready(self, title: str, tags: object):
+        self._cached_title = title
+        self._cached_tags = list(tags) if isinstance(tags, list) else []
+        self._cached_for_content = self._editor.toPlainText().strip()
 
     def _ensure_saved(self):
         content = self._editor.toPlainText().strip()
@@ -195,6 +270,7 @@ class EditorPanel(QWidget):
         self._result_area.clear()
         self._copy_btn.setEnabled(False)
         self._current_history_id = ""
+        self._cached_for_content = ""
 
     def _on_bookmark(self):
         content = self._editor.toPlainText().strip()
@@ -202,7 +278,11 @@ class EditorPanel(QWidget):
             QMessageBox.information(self, "提示", "没有内容可以收藏")
             return
         self._ensure_saved()
-        self.bookmark_requested.emit(content)
+
+        if content == self._cached_for_content and self._cached_title:
+            self.bookmark_requested.emit(content, self._cached_title, self._cached_tags)
+        else:
+            self.bookmark_requested.emit(content, "", [])
 
     def _run_ai(self, action: str):
         content = self._editor.toPlainText().strip()
@@ -229,6 +309,7 @@ class EditorPanel(QWidget):
             model=config.model,
             action=action,
             content=content,
+            thinking=self._thinking_cb.isChecked(),
         )
         self._stream_worker.chunk_signal.connect(self._on_stream_chunk)
         self._stream_worker.done_signal.connect(self._on_stream_done)
@@ -237,8 +318,10 @@ class EditorPanel(QWidget):
 
     def _on_stream_chunk(self, text: str):
         self._result_area.setPlainText(text)
+        scrollbar = self._result_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
-    def _on_stream_done(self, ok: bool, _: str):
+    def _on_stream_done(self, ok: bool, error: str):
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
         self._status.setText(f"字数: {len(self._editor.toPlainText())}")
@@ -247,7 +330,8 @@ class EditorPanel(QWidget):
             self._copy_btn.setEnabled(True)
         else:
             self._copy_btn.setEnabled(False)
-            QMessageBox.critical(self, "错误", "请求失败，请检查网络或 API 设置")
+            msg = error or "请求失败，请检查网络或 API 设置"
+            QMessageBox.critical(self, "错误", msg)
 
     def _copy_result(self):
         text = self._result_area.toPlainText()

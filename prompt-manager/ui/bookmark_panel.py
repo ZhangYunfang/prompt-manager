@@ -30,6 +30,7 @@ class BookmarkPanel(QWidget):
         self._list.setContextMenuPolicy(Qt.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._on_context_menu)
         self._list.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self._list.keyPressEvent = self._list_key_press
         layout.addWidget(self._list)
 
     def set_entries(self, entries: list[BookmarkEntry]):
@@ -98,6 +99,15 @@ class BookmarkPanel(QWidget):
         delete_action.triggered.connect(lambda checked=False, eid=entry_id: self._delete_entry(eid))
         menu.addAction(delete_action)
         menu.exec_(self._list.viewport().mapToGlobal(pos))
+
+    def _list_key_press(self, event):
+        if event.key() == Qt.Key_Delete:
+            item = self._list.currentItem()
+            if item:
+                entry_id = item.data(Qt.UserRole)
+                self._delete_entry(entry_id)
+        else:
+            QListWidget.keyPressEvent(self._list, event)
 
     def _delete_entry(self, entry_id: str):
         self._all_entries = [e for e in self._all_entries if e.id != entry_id]
