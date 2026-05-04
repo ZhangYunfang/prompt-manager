@@ -72,9 +72,10 @@ class BookmarkPanel(QWidget):
         copy_btn = QPushButton("复制")
         copy_btn.setFixedSize(50, 24)
         copy_btn.setStyleSheet("font-size: 11px; padding: 0;")
-        copy_btn.clicked.connect(lambda checked=None, e=entry: self._copy_entry(e))
+        copy_btn.clicked.connect(lambda checked=False, e=entry: self._copy_entry(e))
         h.addWidget(copy_btn)
 
+        widget.setMinimumHeight(30)
         item.setSizeHint(widget.sizeHint())
         self._list.setItemWidget(item, widget)
         return item

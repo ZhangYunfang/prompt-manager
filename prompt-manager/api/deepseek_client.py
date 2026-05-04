@@ -1,5 +1,7 @@
 import json
-from typing import Tuple, Callable
+import queue
+import threading
+from typing import Tuple
 import requests
 
 
@@ -33,18 +35,39 @@ FAST_TEMPERATURE = 0.0
 FAST_TIMEOUT = 10
 
 
-def _parse_sse_line(line: str) -> str:
-    if line.startswith("data: "):
-        data_str = line[6:]
-        if data_str.strip() == "[DONE]":
-            return None
-        try:
-            data = json.loads(data_str)
-            delta = data["choices"][0].get("delta", {})
-            return delta.get("content", "")
-        except (json.JSONDecodeError, KeyError, IndexError):
-            return ""
-    return ""
+class StreamResult:
+    def __init__(self):
+        self.text = ""
+        self.done = False
+        self.error = ""
+        self._lock = threading.Lock()
+
+    def update(self, text: str):
+        with self._lock:
+            self.text = text
+
+    def finish(self, error: str = ""):
+        with self._lock:
+            self.done = True
+            self.error = error
+
+    def get(self):
+        with self._lock:
+            return self.text, self.done, self.error
+
+
+def _parse_sse_line(line: str):
+    if not line.startswith("data:"):
+        return None
+    data_str = line[5:].strip()
+    if data_str == "[DONE]":
+        return None
+    try:
+        data = json.loads(data_str)
+        delta = data["choices"][0].get("delta", {})
+        return delta.get("content", "")
+    except (json.JSONDecodeError, KeyError, IndexError):
+        return ""
 
 
 class DeepSeekClient:
@@ -88,9 +111,10 @@ class DeepSeekClient:
         except Exception as e:
             return False, f"未知错误: {e}"
 
-    def _call_stream(self, system_prompt: str, user_content: str, on_chunk: Callable[[str], None]) -> Tuple[bool, str]:
+    def stream_call(self, system_prompt: str, user_content: str, result: StreamResult):
         if not self._api_key:
-            return False, "请先在设置中配置 API Key"
+            result.finish("请先在设置中配置 API Key")
+            return
         try:
             resp = requests.post(
                 f"{self._base_url}/chat/completions",
@@ -112,37 +136,45 @@ class DeepSeekClient:
             )
             resp.raise_for_status()
             full = ""
-            for line in resp.iter_lines(decode_unicode=True):
-                if line:
-                    chunk = _parse_sse_line(line)
-                    if chunk is None:
-                        break
-                    if chunk:
-                        full += chunk
-                        on_chunk(full)
-            return True, full
+            buffer = ""
+            for byte_chunk in resp.iter_content(chunk_size=1, decode_unicode=True):
+                if byte_chunk is None:
+                    continue
+                buffer += byte_chunk
+                if buffer.endswith("\n"):
+                    line = buffer.strip()
+                    buffer = ""
+                    if line:
+                        chunk = _parse_sse_line(line)
+                        if chunk is not None:
+                            full += chunk
+                            result.update(full)
+                        elif _parse_sse_line(line) is None and line.startswith("data:"):
+                            data = line[5:].strip()
+                            if data == "[DONE]" or not data:
+                                continue
+            result.update(full)
+            if not full:
+                result.finish("API 返回空结果")
+            else:
+                result.finish()
         except requests.exceptions.Timeout:
-            return False, "请求超时，请检查网络后重试"
+            result.finish("请求超时，请检查网络后重试")
         except requests.exceptions.ConnectionError:
-            return False, "无法连接到 API 服务器，请检查网络和 API 地址"
+            result.finish("无法连接到 API 服务器，请检查网络和 API 地址")
         except requests.exceptions.HTTPError as e:
             if resp.status_code == 401:
-                return False, "API Key 无效，请在设置中更新"
-            return False, f"API 错误 ({resp.status_code}): {e}"
+                result.finish("API Key 无效，请在设置中更新")
+            else:
+                result.finish(f"API 错误 ({resp.status_code}): {e}")
         except Exception as e:
-            return False, f"未知错误: {e}"
+            result.finish(f"未知错误: {e}")
 
     def format_cleanup(self, content: str) -> Tuple[bool, str]:
         return self._call(FORMAT_SYSTEM_PROMPT, content)
 
-    def format_cleanup_stream(self, content: str, on_chunk: Callable[[str], None]) -> Tuple[bool, str]:
-        return self._call_stream(FORMAT_SYSTEM_PROMPT, content, on_chunk)
-
     def optimize(self, content: str) -> Tuple[bool, str]:
         return self._call(OPTIMIZE_SYSTEM_PROMPT, content)
-
-    def optimize_stream(self, content: str, on_chunk: Callable[[str], None]) -> Tuple[bool, str]:
-        return self._call_stream(OPTIMIZE_SYSTEM_PROMPT, content, on_chunk)
 
     def test_connection(self) -> Tuple[bool, str]:
         return self._call(FORMAT_SYSTEM_PROMPT, "test")

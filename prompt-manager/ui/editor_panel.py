@@ -5,14 +5,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, QThread, QTimer
 from PySide6.QtGui import QFont
 
-from api.deepseek_client import DeepSeekClient
+from api.deepseek_client import DeepSeekClient, StreamResult, FORMAT_SYSTEM_PROMPT, OPTIMIZE_SYSTEM_PROMPT
 from storage.models import HistoryEntry
 
 
 class _StreamWorker(QThread):
-    chunk_signal = Signal(str)
-    done_signal = Signal(bool, str)
-
     def __init__(self, api_key: str, base_url: str, model: str, action: str, content: str, thinking: bool):
         super().__init__()
         self._api_key = api_key
@@ -21,6 +18,7 @@ class _StreamWorker(QThread):
         self._action = action
         self._content = content
         self._thinking = thinking
+        self.result = StreamResult()
 
     def run(self):
         client = DeepSeekClient(
@@ -28,25 +26,11 @@ class _StreamWorker(QThread):
             base_url=self._base_url,
             model=self._model,
         )
-        action_map = {
-            "format_cleanup": (client.format_cleanup_stream, client.format_cleanup),
-            "optimize": (client.optimize_stream, client.optimize),
-        }
-        stream_fn, fallback_fn = action_map.get(self._action, (None, None))
-        if not stream_fn:
-            self.done_signal.emit(False, "未知操作")
-            return
-
+        system_prompt = FORMAT_SYSTEM_PROMPT if self._action == "format_cleanup" else OPTIMIZE_SYSTEM_PROMPT
         content = self._content
         if self._thinking:
             content = "请仔细思考，一步步推理后再给出最终结果：\n" + content
-
-        ok, result = stream_fn(content, self.chunk_signal.emit)
-        if not ok or not result:
-            ok, result = fallback_fn(content)
-            if ok:
-                self.chunk_signal.emit(result)
-        self.done_signal.emit(ok, "" if ok else result)
+        client.stream_call(system_prompt, content, self.result)
 
 
 class _TitleWorker(QThread):
@@ -113,6 +97,10 @@ class EditorPanel(QWidget):
         self._cached_tags = []
         self._cached_for_content = ""
         self._build_ui()
+
+        self._stream_timer = QTimer(self)
+        self._stream_timer.setInterval(50)
+        self._stream_timer.timeout.connect(self._poll_stream)
 
         self._prefetch_timer = QTimer(self)
         self._prefetch_timer.setSingleShot(True)
@@ -206,9 +194,7 @@ class EditorPanel(QWidget):
 
     def _prefetch(self):
         content = self._editor.toPlainText().strip()
-        if len(content) < 20:
-            return
-        if content == self._cached_for_content:
+        if len(content) < 20 or content == self._cached_for_content:
             return
         config = self._config_getter()
         if not config.api_key:
@@ -311,27 +297,35 @@ class EditorPanel(QWidget):
             content=content,
             thinking=self._thinking_cb.isChecked(),
         )
-        self._stream_worker.chunk_signal.connect(self._on_stream_chunk)
-        self._stream_worker.done_signal.connect(self._on_stream_done)
-        self._stream_worker.finished.connect(lambda: setattr(self, '_stream_worker', None))
+        self._stream_worker.finished.connect(self._on_stream_done)
+        self._stream_timer.start()
         self._stream_worker.start()
 
-    def _on_stream_chunk(self, text: str):
-        self._result_area.setPlainText(text)
-        scrollbar = self._result_area.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+    def _poll_stream(self):
+        if not self._stream_worker:
+            return
+        text, done, error = self._stream_worker.result.get()
+        if text:
+            self._result_area.setPlainText(text)
+            scrollbar = self._result_area.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+        if done:
+            self._stream_timer.stop()
 
-    def _on_stream_done(self, ok: bool, error: str):
+    def _on_stream_done(self):
+        if not self._stream_worker:
+            return
+        text, done, error = self._stream_worker.result.get()
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
         self._status.setText(f"字数: {len(self._editor.toPlainText())}")
 
-        if ok:
+        if not error:
             self._copy_btn.setEnabled(True)
         else:
             self._copy_btn.setEnabled(False)
-            msg = error or "请求失败，请检查网络或 API 设置"
-            QMessageBox.critical(self, "错误", msg)
+            QMessageBox.critical(self, "错误", error)
+        self._stream_worker = None
 
     def _copy_result(self):
         text = self._result_area.toPlainText()
