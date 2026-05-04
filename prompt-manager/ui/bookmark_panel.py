@@ -11,6 +11,7 @@ from storage.models import BookmarkEntry
 
 class BookmarkPanel(QWidget):
     entry_selected = Signal(BookmarkEntry)
+    entry_deleted = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -103,3 +104,4 @@ class BookmarkPanel(QWidget):
             if self._list.item(i).data(Qt.UserRole) == entry_id:
                 self._list.takeItem(i)
                 break
+        self.entry_deleted.emit(entry_id)

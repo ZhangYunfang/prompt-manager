@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QPushButton,
-    QDialogButtonBox, QVBoxLayout, QLabel,
+    QDialogButtonBox, QVBoxLayout, QLabel, QHBoxLayout,
 )
 from PySide6.QtCore import Qt, QThread, Signal
 
@@ -45,7 +45,15 @@ class SettingsDialog(QDialog):
         self._api_key_edit = QLineEdit()
         self._api_key_edit.setEchoMode(QLineEdit.Password)
         self._api_key_edit.setPlaceholderText("输入 DeepSeek API Key")
-        form.addRow("API Key:", self._api_key_edit)
+
+        self._key_toggle_btn = QPushButton("显示")
+        self._key_toggle_btn.setFixedWidth(50)
+        self._key_toggle_btn.clicked.connect(self._toggle_key_visibility)
+
+        key_row = QHBoxLayout()
+        key_row.addWidget(self._api_key_edit)
+        key_row.addWidget(self._key_toggle_btn)
+        form.addRow("API Key:", key_row)
 
         self._base_url_edit = QLineEdit()
         form.addRow("API 地址:", self._base_url_edit)
@@ -72,6 +80,14 @@ class SettingsDialog(QDialog):
         self._api_key_edit.setText(self._config.api_key)
         self._base_url_edit.setText(self._config.base_url)
         self._model_edit.setText(self._config.model)
+
+    def _toggle_key_visibility(self):
+        if self._api_key_edit.echoMode() == QLineEdit.Password:
+            self._api_key_edit.setEchoMode(QLineEdit.Normal)
+            self._key_toggle_btn.setText("隐藏")
+        else:
+            self._api_key_edit.setEchoMode(QLineEdit.Password)
+            self._key_toggle_btn.setText("显示")
 
     def _test_connection(self):
         api_key = self._api_key_edit.text().strip()

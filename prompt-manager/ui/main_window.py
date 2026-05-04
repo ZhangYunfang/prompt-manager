@@ -43,9 +43,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(splitter)
 
         self._history_panel.entry_selected.connect(self._on_history_selected)
+        self._history_panel.entry_deleted.connect(self._on_history_deleted)
         self._editor_panel.history_saved.connect(self._on_history_saved)
         self._editor_panel.bookmark_requested.connect(self._on_add_bookmark)
         self._bookmark_panel.entry_selected.connect(self._on_bookmark_selected)
+        self._bookmark_panel.entry_deleted.connect(self._on_bookmark_deleted)
 
     def _build_menu(self):
         menubar = self.menuBar()
