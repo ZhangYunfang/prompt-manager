@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QListWidget, QListWidgetItem,
-    QPushButton, QLabel, QMenu, QAction, QHBoxLayout,
+    QPushButton, QLabel, QMenu, QHBoxLayout,
     QApplication, QInputDialog, QMessageBox,
 )
+from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal, Qt
 
 from storage.models import BookmarkEntry

@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QListWidget,
-    QListWidgetItem, QLabel, QMenu, QAction, QMessageBox,
+    QListWidgetItem, QLabel, QMenu, QMessageBox,
 )
+from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal, Qt
 
 from storage.models import HistoryEntry
