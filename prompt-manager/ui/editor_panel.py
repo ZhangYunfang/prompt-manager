@@ -3,10 +3,10 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QMessageBox, QApplication, QCheckBox,
 )
 from PySide6.QtCore import Signal, QThread, QTimer
-from PySide6.QtGui import QFont
 
 from api.deepseek_client import DeepSeekClient, StreamResult, FORMAT_SYSTEM_PROMPT, OPTIMIZE_SYSTEM_PROMPT
 from storage.models import HistoryEntry
+from . import theme
 
 
 class _StreamWorker(QThread):
@@ -90,6 +90,7 @@ class EditorPanel(QWidget):
 
     def __init__(self, config_getter, parent=None):
         super().__init__(parent)
+        theme.as_panel(self)
         self._config_getter = config_getter
         self._current_history_id = ""
         self._loading = False
@@ -112,88 +113,94 @@ class EditorPanel(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
 
         header_row = QHBoxLayout()
+        header_row.setSpacing(8)
         header = QLabel("编辑区")
-        header.setStyleSheet("font-weight: bold; font-size: 13px; color: #333;")
+        header.setObjectName("eyebrow")
         header_row.addWidget(header)
         header_row.addStretch()
 
-        clear_btn = QPushButton("清除")
-        clear_btn.setFixedWidth(50)
+        clear_btn = theme.variant(QPushButton("清除"), "ghost")
         clear_btn.setToolTip("清除内容，下次输入作为新提示词")
         clear_btn.clicked.connect(self._on_clear)
         header_row.addWidget(clear_btn)
         layout.addLayout(header_row)
 
         self._editor = QPlainTextEdit()
-        self._editor.setPlaceholderText("在这里输入提示词...")
-        self._editor.setFont(QFont("Consolas", 11))
+        self._editor.setPlaceholderText("在这里输入提示词…")
+        self._editor.setFont(theme.mono_font(13))
+        self._editor.setTabChangesFocus(True)
         self._editor.textChanged.connect(self._on_text_changed)
-        layout.addWidget(self._editor, 2)
+        layout.addWidget(self._editor, 3)
 
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
 
         self._thinking_cb = QCheckBox("深度思考")
         self._thinking_cb.setToolTip("开启后 AI 会更仔细地推理，但耗时更长")
         btn_layout.addWidget(self._thinking_cb)
+        btn_layout.addSpacing(4)
 
         self._format_btn = QPushButton("整理格式")
         self._format_btn.setToolTip("修正错字、标点、空格和换行")
         self._format_btn.clicked.connect(lambda: self._run_ai("format_cleanup"))
         btn_layout.addWidget(self._format_btn)
 
-        self._optimize_btn = QPushButton("优化提示词")
+        self._optimize_btn = theme.variant(QPushButton("优化提示词"), "primary")
         self._optimize_btn.setToolTip("增强提示词的清晰度和有效性")
         self._optimize_btn.clicked.connect(lambda: self._run_ai("optimize"))
         btn_layout.addWidget(self._optimize_btn)
 
-        self._save_btn = QPushButton("保存")
+        self._save_btn = theme.variant(QPushButton("保存"), "ghost")
         self._save_btn.clicked.connect(self._manual_save)
         btn_layout.addWidget(self._save_btn)
 
         btn_layout.addStretch()
 
-        self._bookmark_btn = QPushButton("收藏")
+        self._bookmark_btn = theme.variant(QPushButton("收藏"), "accent")
         self._bookmark_btn.setToolTip("将当前内容添加到收藏")
         self._bookmark_btn.clicked.connect(self._on_bookmark)
         btn_layout.addWidget(self._bookmark_btn)
 
         layout.addLayout(btn_layout)
 
+        result_row = QHBoxLayout()
+        result_row.setSpacing(8)
         result_header = QLabel("AI 结果")
-        result_header.setStyleSheet("font-weight: bold; font-size: 13px; color: #333;")
-        layout.addWidget(result_header)
+        result_header.setObjectName("eyebrow")
+        result_row.addWidget(result_header)
+        result_row.addStretch()
+
+        self._copy_btn = theme.variant(QPushButton("复制结果"), "ghost")
+        self._copy_btn.setEnabled(False)
+        self._copy_btn.clicked.connect(self._copy_result)
+        result_row.addWidget(self._copy_btn)
+        layout.addLayout(result_row)
 
         self._result_area = QPlainTextEdit()
         self._result_area.setReadOnly(True)
-        self._result_area.setPlaceholderText("整理格式或优化后的结果将显示在这里...")
-        self._result_area.setFont(QFont("Consolas", 11))
-        layout.addWidget(self._result_area, 1)
+        self._result_area.setPlaceholderText("整理或优化后的结果将显示在这里…")
+        self._result_area.setFont(theme.mono_font(13))
+        layout.addWidget(self._result_area, 2)
 
-        result_btn_layout = QHBoxLayout()
-        result_btn_layout.addStretch()
-
-        self._copy_btn = QPushButton("复制结果")
-        self._copy_btn.setEnabled(False)
-        self._copy_btn.clicked.connect(self._copy_result)
-        result_btn_layout.addWidget(self._copy_btn)
-
-        layout.addLayout(result_btn_layout)
-
-        self._status = QLabel("字数: 0")
-        self._status.setStyleSheet("color: #888; font-size: 11px;")
+        self._status = QLabel("字数 0")
+        self._status.setObjectName("dim")
         layout.addWidget(self._status)
 
     def _on_text_changed(self):
         if self._loading:
             return
         text = self._editor.toPlainText()
-        self._status.setText(f"字数: {len(text)}")
+        self._set_status(f"字数 {len(text)}")
         if len(text.strip()) > 20:
             self._prefetch_timer.start()
+
+    def _set_status(self, text: str, color: str = ""):
+        self._status.setText(text)
+        self._status.setStyleSheet(f"color: {color};" if color else "")
 
     def _prefetch(self):
         content = self._editor.toPlainText().strip()
@@ -290,7 +297,7 @@ class EditorPanel(QWidget):
         self._format_btn.setEnabled(False)
         self._optimize_btn.setEnabled(False)
         self._copy_btn.setEnabled(False)
-        self._status.setText("正在调用 AI...")
+        self._set_status("正在调用 AI…", theme.CYAN)
 
         self._stream_worker = _StreamWorker(
             api_key=api_key,
@@ -321,12 +328,13 @@ class EditorPanel(QWidget):
         text, done, error = self._stream_worker.result.get()
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
-        self._status.setText(f"字数: {len(self._editor.toPlainText())}")
 
         if not error:
             self._copy_btn.setEnabled(True)
+            self._set_status(f"完成 · 字数 {len(self._editor.toPlainText())}", theme.OK)
         else:
             self._copy_btn.setEnabled(False)
+            self._set_status(f"字数 {len(self._editor.toPlainText())}")
             QMessageBox.critical(self, "错误", error)
         self._stream_worker = None
 

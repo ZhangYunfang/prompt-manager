@@ -2,10 +2,11 @@ import sys
 import os
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QIcon
 
 from config import Config
 from storage.data_store import DataStore
+from ui import theme
 from ui.main_window import MainWindow
 
 
@@ -19,14 +20,13 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("PromptManager")
 
-    font = QFont("Microsoft YaHei", 10)
-    app.setFont(font)
+    config = Config()
+    theme.apply(app, config.appearance)
 
     icon_path = _get_icon_path()
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    config = Config()
     data_store = DataStore(config.data_dir)
 
     window = MainWindow(config, data_store)

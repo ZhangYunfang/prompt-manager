@@ -1,10 +1,11 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QListWidget, QListWidgetItem,
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QLabel, QMenu, QApplication,
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal, Qt
 
+from . import theme
 from storage.models import BookmarkEntry
 
 
@@ -14,38 +15,27 @@ class BookmarkPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        theme.as_panel(self)
         self._all_entries: list[BookmarkEntry] = []
         self._build_ui()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
 
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
         header = QLabel("收藏夹")
-        header.setStyleSheet("font-weight: bold; font-size: 13px; color: #333;")
-        layout.addWidget(header)
+        header.setObjectName("eyebrow")
+        header_row.addWidget(header)
+        header_row.addStretch()
+        self._count = QLabel("0")
+        self._count.setObjectName("count")
+        header_row.addWidget(self._count)
+        layout.addLayout(header_row)
 
         self._list = QListWidget()
-        self._list.setStyleSheet("""
-            QListWidget {
-                background: #fafafa;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-            QListWidget::item {
-                color: #111;
-                padding: 5px 8px;
-                border-bottom: 1px solid #eee;
-                background: transparent;
-            }
-            QListWidget::item:selected {
-                background: #d0e4f7;
-                color: #111;
-            }
-            QListWidget::item:hover {
-                background: #f0f0f0;
-            }
-        """)
         self._list.setContextMenuPolicy(Qt.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._on_context_menu)
         self._list.itemDoubleClicked.connect(self._on_item_double_clicked)
@@ -63,12 +53,17 @@ class BookmarkPanel(QWidget):
     def _prepend_item(self, entry: BookmarkEntry):
         item = self._make_item(entry)
         self._list.insertItem(0, item)
+        self._sync_count()
 
     def _rebuild_list(self, entries: list[BookmarkEntry]):
         self._list.clear()
         for entry in entries:
             item = self._make_item(entry)
             self._list.addItem(item)
+        self._sync_count()
+
+    def _sync_count(self):
+        self._count.setText(str(self._list.count()))
 
     def _make_item(self, entry: BookmarkEntry) -> QListWidgetItem:
         heading = entry.title or entry.content.split("\n")[0][:30]
@@ -133,4 +128,5 @@ class BookmarkPanel(QWidget):
             if self._list.item(i).data(Qt.UserRole) == entry_id:
                 self._list.takeItem(i)
                 break
+        self._sync_count()
         self.entry_deleted.emit(entry_id)

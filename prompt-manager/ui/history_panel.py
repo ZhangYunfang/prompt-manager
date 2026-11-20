@@ -1,10 +1,11 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLineEdit, QListWidget,
+    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QListWidget,
     QListWidgetItem, QLabel, QMenu,
 )
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import Signal, Qt
 
+from . import theme
 from storage.models import HistoryEntry
 
 
@@ -14,19 +15,29 @@ class HistoryPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        theme.as_panel(self)
         self._all_entries: list[HistoryEntry] = []
         self._build_ui()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
 
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
         header = QLabel("历史记录")
-        header.setStyleSheet("font-weight: bold; font-size: 13px; color: #333;")
-        layout.addWidget(header)
+        header.setObjectName("eyebrow")
+        header_row.addWidget(header)
+        header_row.addStretch()
+        self._count = QLabel("0")
+        self._count.setObjectName("count")
+        header_row.addWidget(self._count)
+        layout.addLayout(header_row)
 
         self._search = QLineEdit()
-        self._search.setPlaceholderText("搜索...")
+        self._search.setPlaceholderText("搜索内容…")
+        self._search.setClearButtonEnabled(True)
         self._search.textChanged.connect(self._on_search)
         layout.addWidget(self._search)
 
@@ -60,12 +71,17 @@ class HistoryPanel(QWidget):
     def _prepend_item(self, entry: HistoryEntry):
         item = self._make_list_item(entry)
         self._list.insertItem(0, item)
+        self._sync_count()
 
     def _rebuild_list(self, entries: list[HistoryEntry]):
         self._list.clear()
         for entry in entries:
             item = self._make_list_item(entry)
             self._list.addItem(item)
+        self._sync_count()
+
+    def _sync_count(self):
+        self._count.setText(str(self._list.count()))
 
     def _refresh_item(self, entry_id: str, entry: HistoryEntry):
         for i in range(self._list.count()):
@@ -128,4 +144,5 @@ class HistoryPanel(QWidget):
             if self._list.item(i).data(Qt.UserRole) == entry_id:
                 self._list.takeItem(i)
                 break
+        self._sync_count()
         self.entry_deleted.emit(entry_id)

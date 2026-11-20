@@ -1,14 +1,14 @@
-import os
-
 from PySide6.QtWidgets import (
-    QMainWindow, QSplitter, QMessageBox, QWidget,
+    QMainWindow, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QApplication,
 )
-from PySide6.QtGui import QAction, QIcon
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QPainter, QLinearGradient, QColor
+from PySide6.QtCore import Qt, QTimer
 
 from config import Config
 from storage.data_store import DataStore
 from storage.models import HistoryEntry, BookmarkEntry
+from . import theme
 from .editor_panel import EditorPanel
 from .history_panel import HistoryPanel
 from .bookmark_panel import BookmarkPanel
@@ -17,19 +17,117 @@ from .settings_dialog import SettingsDialog
 from .about_dialog import AboutDialog
 
 
+class _AccentLine(QWidget):
+    """顶部流动渐变强调线：底色青→紫，另有一道亮光循环掠过。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(2)
+        self._phase = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(40)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+
+    def _tick(self):
+        self._phase = (self._phase + 0.006) % 1.0
+        self.update()
+
+    def paintEvent(self, event):
+        w = self.width()
+        if w <= 0:
+            return
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.Antialiasing)
+            base = QLinearGradient(0, 0, w, 0)
+            base.setColorAt(0.0, QColor(theme.CYAN))
+            base.setColorAt(0.5, QColor(theme.PURPLE))
+            base.setColorAt(1.0, QColor(theme.CYAN))
+            painter.setOpacity(0.55)
+            painter.fillRect(self.rect(), base)
+
+            head = self._phase * (w + 240) - 120
+            # 黑夜用白光掠过，白天改深墨，否则白底上看不见
+            r, g, b = (255, 255, 255) if theme.MODE == "dark" else (22, 32, 47)
+            shine = QLinearGradient(head - 120, 0, head + 120, 0)
+            shine.setColorAt(0.0, QColor(r, g, b, 0))
+            shine.setColorAt(0.5, QColor(r, g, b, 170))
+            shine.setColorAt(1.0, QColor(r, g, b, 0))
+            painter.setOpacity(1.0)
+            painter.fillRect(self.rect(), shine)
+        finally:
+            painter.end()
+
+
+class _HeaderBar(QWidget):
+    """品牌栏：标题 + 副标 + 右侧模型信息。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 0, 2, 0)
+        layout.setSpacing(8)
+
+        row = QHBoxLayout()
+        row.setSpacing(12)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(0)
+        self._title = QLabel("提示词管理")
+        self._title.setObjectName("brand")
+        self._subtitle = QLabel("PROMPT MANAGER")
+        self._subtitle.setObjectName("brandSub")
+        title_col.addWidget(self._title)
+        title_col.addWidget(self._subtitle)
+        row.addLayout(title_col)
+        row.addStretch()
+
+        self._meta = QLabel("")
+        self._meta.setObjectName("dim")
+        row.addWidget(self._meta, 0, Qt.AlignBottom)
+
+        self._appearance_btn = theme.variant(QPushButton("白天"), "ghost")
+        self._appearance_btn.setToolTip("切换黑夜 / 白天外观")
+        self._appearance_btn.setCursor(Qt.PointingHandCursor)
+        row.addWidget(self._appearance_btn, 0, Qt.AlignBottom)
+
+        layout.addLayout(row)
+        layout.addWidget(_AccentLine())
+
+    def set_meta(self, text: str):
+        self._meta.setText(text)
+
+    def set_appearance_label(self, mode: str):
+        # 按钮显示“点一下会切到哪种模式”
+        self._appearance_btn.setText("白天" if mode == "dark" else "黑夜")
+
+
 class MainWindow(QMainWindow):
     def __init__(self, config: Config, data_store: DataStore):
         super().__init__()
         self._config = config
         self._data_store = data_store
         self.setWindowTitle("提示词管理")
-        self.resize(1100, 700)
+        self.resize(1160, 740)
         self._build_ui()
         self._build_menu()
         self._load_data()
 
     def _build_ui(self):
+        central = QWidget()
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(16, 14, 16, 16)
+        outer.setSpacing(14)
+
+        self._header = _HeaderBar()
+        self._refresh_meta()
+        self._header._appearance_btn.clicked.connect(self._toggle_appearance)
+        self._header.set_appearance_label(theme.MODE)
+        outer.addWidget(self._header)
+
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(10)
 
         self._history_panel = HistoryPanel()
         self._editor_panel = EditorPanel(self._get_config)
@@ -39,12 +137,14 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._editor_panel)
         splitter.addWidget(self._bookmark_panel)
 
-        splitter.setSizes([220, 600, 220])
+        splitter.setSizes([260, 620, 260])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
+        splitter.setChildrenCollapsible(False)
 
-        self.setCentralWidget(splitter)
+        outer.addWidget(splitter, 1)
+        self.setCentralWidget(central)
 
         self._history_panel.entry_selected.connect(self._on_history_selected)
         self._history_panel.entry_deleted.connect(self._on_history_deleted)
@@ -61,6 +161,7 @@ class MainWindow(QMainWindow):
         file_menu = menubar.addMenu("文件")
 
         settings_action = QAction("设置", self)
+        settings_action.setShortcut("Ctrl+,")
         settings_action.triggered.connect(self._open_settings)
         file_menu.addAction(settings_action)
 
@@ -74,6 +175,20 @@ class MainWindow(QMainWindow):
         about_action = QAction("关于提示词管理", self)
         about_action.triggered.connect(self._open_about)
         help_menu.addAction(about_action)
+
+    def _refresh_meta(self):
+        model = self._config.model or "未配置模型"
+        key_state = "已连接" if self._config.api_key else "未配置 API Key"
+        self._header.set_meta(f"{model}  ·  {key_state}")
+
+    def _toggle_appearance(self):
+        self._set_appearance("light" if theme.MODE == "dark" else "dark")
+
+    def _set_appearance(self, mode: str):
+        theme.apply(QApplication.instance(), mode)
+        self._config.appearance = mode
+        self._config.save()
+        self._header.set_appearance_label(mode)
 
     def _get_config(self) -> Config:
         return self._config
@@ -101,20 +216,14 @@ class MainWindow(QMainWindow):
                 tags=cached_tags,
                 title=cached_title,
             )
-            self._data_store.add_bookmark(entry)
-            self._bookmark_panel.add_entry(entry)
         else:
             dialog = BookmarkDialog(self._get_config, content, self)
             if dialog.exec_() != BookmarkDialog.DialogCode.Accepted:
                 return
             title, tags = dialog.get_result()
-            entry = BookmarkEntry.new(
-                content=content,
-                tags=tags,
-                title=title,
-            )
-            self._data_store.add_bookmark(entry)
-            self._bookmark_panel.add_entry(entry)
+            entry = BookmarkEntry.new(content=content, tags=tags, title=title)
+        self._data_store.add_bookmark(entry)
+        self._bookmark_panel.add_entry(entry)
 
     def _on_bookmark_selected(self, entry: BookmarkEntry):
         self._editor_panel.set_content(entry.content)
@@ -128,6 +237,7 @@ class MainWindow(QMainWindow):
     def _open_settings(self):
         dialog = SettingsDialog(self._config, self)
         dialog.exec_()
+        self._refresh_meta()
 
     def _open_about(self):
         dialog = AboutDialog(self)

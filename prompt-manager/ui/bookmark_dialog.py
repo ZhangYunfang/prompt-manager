@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QThread, Signal
 
 from api.deepseek_client import DeepSeekClient
+from . import theme
 
 
 class _TagSuggestWorker(QThread):
@@ -47,6 +48,8 @@ class BookmarkDialog(QDialog):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 18)
+        layout.setSpacing(10)
 
         layout.addWidget(QLabel("标题:"))
         self._title_edit = QLineEdit()
@@ -57,7 +60,7 @@ class BookmarkDialog(QDialog):
         self._tags_group = QGroupBox("AI 建议标签")
         self._tags_layout = QVBoxLayout(self._tags_group)
         self._status_label = QLabel("正在请求 AI 建议...")
-        self._status_label.setStyleSheet("color: gray;")
+        self._status_label.setStyleSheet(f"color: {theme.TEXT_DIM};")
         self._tags_layout.addWidget(self._status_label)
         layout.addWidget(self._tags_group)
 
@@ -67,6 +70,9 @@ class BookmarkDialog(QDialog):
         layout.addWidget(self._custom_tags)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("收藏")
+        buttons.button(QDialogButtonBox.Cancel).setText("取消")
+        theme.variant(buttons.button(QDialogButtonBox.Ok), "primary")
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -75,7 +81,7 @@ class BookmarkDialog(QDialog):
         config = self._config_getter()
         if not config.api_key:
             self._status_label.setText("未配置 API Key，请手动输入标签")
-            self._status_label.setStyleSheet("color: orange;")
+            self._status_label.setStyleSheet(f"color: {theme.WARN};")
             return
 
         self._worker = _TagSuggestWorker(
@@ -102,7 +108,7 @@ class BookmarkDialog(QDialog):
                     self._tags_layout.addWidget(cb)
         else:
             self._status_label.setText("AI 建议获取失败，请手动输入")
-            self._status_label.setStyleSheet("color: red;")
+            self._status_label.setStyleSheet(f"color: {theme.DANGER};")
 
     def _on_accept(self):
         if self._title_edit.text().strip():
