@@ -14,12 +14,14 @@ jobs:
   build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional == true }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14,        label: macOS arm64, arch: arm64, kind: mac }
-          - { os: macos-13,        label: macOS x64,   arch: x64,   kind: mac }
+          # macOS Intel：GitHub 免费 macOS runner 排队很久，失败/超时不算整体失败。
+          # arm64 的 .app 目前由维护者本机构建后手动上传（见 Release 说明）。
+          - { os: macos-13,        label: macOS x64,   arch: x64,   kind: mac,  optional: true }
           - { os: windows-latest,  label: Windows x64, arch: x64,   kind: win }
           - { os: ubuntu-22.04,    label: Linux x64,   arch: x64,   kind: linux }
 
