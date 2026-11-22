@@ -160,8 +160,13 @@ class EditorPanel(QWidget):
 
         btn_layout.addStretch()
 
+        self._new_btn = theme.variant(QPushButton("新增"), "ghost")
+        self._new_btn.setToolTip("新建一条提示词，清空编辑区并定位到输入框")
+        self._new_btn.clicked.connect(self._on_new_prompt)
+        btn_layout.addWidget(self._new_btn)
+
         self._bookmark_btn = theme.variant(QPushButton("收藏"), "accent")
-        self._bookmark_btn.setToolTip("将当前内容添加到收藏")
+        self._bookmark_btn.setToolTip("将当前内容添加到我的提示词")
         self._bookmark_btn.clicked.connect(self._on_bookmark)
         btn_layout.addWidget(self._bookmark_btn)
 
@@ -267,6 +272,14 @@ class EditorPanel(QWidget):
         self._copy_btn.setEnabled(False)
         self._current_history_id = ""
         self._cached_for_content = ""
+
+    def _on_new_prompt(self):
+        self._on_clear()
+        self._editor.setFocus()
+
+    def add_bookmark(self):
+        """供「我的提示词」面板的 + 按钮调用。"""
+        self._on_bookmark()
 
     def _on_bookmark(self):
         content = self._editor.toPlainText().strip()

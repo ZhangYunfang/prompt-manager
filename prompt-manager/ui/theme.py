@@ -141,6 +141,13 @@ QPushButton[variant="primary"]:disabled {{
     border: 1px solid {t['BORDER']};
 }}
 
+QPushButton#plus {{
+    padding: 0;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 7px;
+}}
+
 QPushButton[variant="accent"] {{
     background: transparent;
     color: {t['CYAN']};

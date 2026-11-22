@@ -1,6 +1,7 @@
 """从 icon-source.png 生成 macOS(.icns) 与 Windows(.ico) 图标。
 
-源图建议 ≥512×512；小于该尺寸会被平滑放大，细节会软。
+源图会先合成到一层**白色圆角底**上（源图多为透明底，直接放深色 Dock/标题栏里看不清），
+再导出各档尺寸。源图建议 ≥512×512；小于该尺寸会被平滑放大，细节会软。
 用法：./.venv/bin/python make_icons.py
 """
 
@@ -8,11 +9,14 @@ import os
 import subprocess
 import sys
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QImage, QPainter
 
 SRC = "icon-source.png"
 ICONSET = "build/icon.iconset"
+MASTER = 1024          # 主图边长，先合成到这个尺寸再缩各档
+RADIUS_RATIO = 0.2237   # Big Sur 圆角比例（相对边长）
+PADDING_RATIO = 0.12    # 图案四周留白，避免贴边
 
 # macOS .iconset 要求的具体尺寸（像素, 文件名）
 SIZES = [
@@ -24,6 +28,32 @@ SIZES = [
 ]
 
 
+def compose(src: QImage, size: int = MASTER) -> QImage:
+    """白底圆角方块打底，源图居中叠在上面；圆角外保持透明。"""
+    out = QImage(size, size, QImage.Format_ARGB32)
+    out.fill(Qt.transparent)
+
+    painter = QPainter(out)
+    try:
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+
+        radius = size * RADIUS_RATIO
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#FFFFFF"))
+        painter.drawRoundedRect(QRectF(0, 0, size, size), radius, radius)
+
+        pad = size * PADDING_RATIO
+        inner = int(size - 2 * pad)
+        art = src.scaled(inner, inner, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        painter.drawImage(
+            int((size - art.width()) / 2), int((size - art.height()) / 2), art
+        )
+    finally:
+        painter.end()
+    return out
+
+
 def main() -> int:
     if not os.path.exists(SRC):
         print(f"缺少源图 {SRC}", file=sys.stderr)
@@ -32,11 +62,12 @@ def main() -> int:
     if src.isNull():
         print(f"读不出源图 {SRC}", file=sys.stderr)
         return 1
-    print(f"源图 {src.width()}x{src.height()}")
+    print(f"源图 {src.width()}x{src.height()}（透明底会补白底）")
 
+    master = compose(src, MASTER)
     os.makedirs(ICONSET, exist_ok=True)
     for px, name in SIZES:
-        img = src.scaled(px, px, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        img = master.scaled(px, px, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         img.save(os.path.join(ICONSET, name), "PNG")
 
     subprocess.run(["iconutil", "-c", "icns", ICONSET, "-o", "icon-rounded.icns"], check=True)
@@ -44,7 +75,7 @@ def main() -> int:
 
     if sys.platform == "darwin":
         # Windows 用的 .ico 在 macOS 上由 Qt 写出（单张 256）
-        src.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation).save(
+        master.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation).save(
             "icon-rounded.ico", "ICO"
         )
         print("已生成 icon-rounded.ico")

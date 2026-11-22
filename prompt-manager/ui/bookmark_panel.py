@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QLabel, QMenu, QApplication,
+    QLabel, QMenu, QApplication, QPushButton,
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal, Qt
@@ -12,6 +12,7 @@ from storage.models import BookmarkEntry
 class BookmarkPanel(QWidget):
     entry_selected = Signal(BookmarkEntry)
     entry_deleted = Signal(str)
+    new_requested = Signal()      # 标题旁的「+」：新增一条我的提示词
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -26,9 +27,18 @@ class BookmarkPanel(QWidget):
 
         header_row = QHBoxLayout()
         header_row.setSpacing(8)
-        header = QLabel("收藏夹")
+        header = QLabel("我的提示词")
         header.setObjectName("eyebrow")
         header_row.addWidget(header)
+
+        self._add_btn = theme.variant(QPushButton("+"), "accent")
+        self._add_btn.setObjectName("plus")
+        self._add_btn.setFixedSize(24, 24)
+        self._add_btn.setToolTip("新增：把编辑区内容存进我的提示词")
+        self._add_btn.setCursor(Qt.PointingHandCursor)
+        self._add_btn.clicked.connect(self.new_requested.emit)
+        header_row.addWidget(self._add_btn)
+
         header_row.addStretch()
         self._count = QLabel("0")
         self._count.setObjectName("count")
@@ -72,7 +82,7 @@ class BookmarkPanel(QWidget):
 
         item = QListWidgetItem(display)
         item.setData(Qt.UserRole, entry.id)
-        item.setToolTip(f"双击加载到编辑器\n右键复制或取消收藏\n\n{entry.content[:300]}")
+        item.setToolTip(f"双击加载到编辑器\n右键复制或删除\n\n{entry.content[:300]}")
         return item
 
     def _copy_entry(self, entry: BookmarkEntry):
@@ -98,7 +108,7 @@ class BookmarkPanel(QWidget):
 
         menu.addSeparator()
 
-        delete_action = QAction("取消收藏", self)
+        delete_action = QAction("从我的提示词移除", self)
         delete_action.triggered.connect(lambda checked=False, eid=entry_id: self._delete_entry(eid))
         menu.addAction(delete_action)
 

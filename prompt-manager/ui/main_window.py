@@ -129,13 +129,14 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(10)
 
-        self._history_panel = HistoryPanel()
-        self._editor_panel = EditorPanel(self._get_config)
         self._bookmark_panel = BookmarkPanel()
+        self._editor_panel = EditorPanel(self._get_config)
+        self._history_panel = HistoryPanel()
 
-        splitter.addWidget(self._history_panel)
-        splitter.addWidget(self._editor_panel)
+        # 左：我的提示词 ｜ 中：编辑区 ｜ 右：历史记录
         splitter.addWidget(self._bookmark_panel)
+        splitter.addWidget(self._editor_panel)
+        splitter.addWidget(self._history_panel)
 
         splitter.setSizes([260, 620, 260])
         splitter.setStretchFactor(0, 0)
@@ -155,6 +156,8 @@ class MainWindow(QMainWindow):
 
         self._bookmark_panel.entry_selected.connect(self._on_bookmark_selected)
         self._bookmark_panel.entry_deleted.connect(self._on_bookmark_deleted)
+        # 「我的提示词」标题旁的 + ：把编辑区内容存进我的提示词
+        self._bookmark_panel.new_requested.connect(self._editor_panel.add_bookmark)
 
     def _build_menu(self):
         menubar = self.menuBar()
