@@ -81,8 +81,8 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': '提示词管理',
             'CFBundleDisplayName': '提示词管理',
-            'CFBundleShortVersionString': '1.2.0',
-            'CFBundleVersion': '1.2.0',
+            'CFBundleShortVersionString': '1.3.0',
+            'CFBundleVersion': '1.3.0',
             'NSHighResolutionCapable': True,
         },
     )
