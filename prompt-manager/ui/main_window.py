@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QPushButton, QApplication,
 )
 from PySide6.QtGui import QAction, QPainter, QLinearGradient, QColor
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 
 from config import Config
 from storage.data_store import DataStore
@@ -60,6 +60,41 @@ class _AccentLine(QWidget):
             painter.end()
 
 
+class _PaletteBar(QWidget):
+    """方形色盘：一个色块一种主体风格，悬停显示名字，点击切换。"""
+
+    picked = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        self._btns = {}
+        for key, (label, _main, _second) in theme.ACCENTS.items():
+            btn = QPushButton()
+            btn.setFixedSize(18, 18)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(f"主体风格：{label}")
+            btn.setAccessibleName(f"主体风格 {label}")
+            btn.clicked.connect(lambda _checked=False, k=key: self.picked.emit(k))
+            self._btns[key] = btn
+            layout.addWidget(btn)
+        self.set_current(theme.ACCENT)
+
+    def set_current(self, key: str):
+        """当前风格加一圈描边；颜色随模式（深/浅）自动调整。"""
+        for k, btn in self._btns.items():
+            color = theme.swatch_color(k)
+            ring = theme.TEXT if k == key else theme.BORDER
+            width = 2 if k == key else 1
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {color}; border: {width}px solid {ring};"
+                f" border-radius: 5px; }}"
+                f"QPushButton:hover {{ border: 2px solid {theme.TEXT}; }}"
+            )
+
+
 class _HeaderBar(QWidget):
     """品牌栏：标题 + 副标 + 右侧模型信息。"""
 
@@ -87,6 +122,9 @@ class _HeaderBar(QWidget):
         self._meta.setObjectName("dim")
         row.addWidget(self._meta, 0, Qt.AlignBottom)
 
+        self._palette = _PaletteBar()
+        row.addWidget(self._palette, 0, Qt.AlignBottom)
+
         self._appearance_btn = theme.variant(QPushButton("白天"), "ghost")
         self._appearance_btn.setToolTip("切换黑夜 / 白天外观")
         self._appearance_btn.setCursor(Qt.PointingHandCursor)
@@ -97,6 +135,9 @@ class _HeaderBar(QWidget):
 
     def set_meta(self, text: str):
         self._meta.setText(text)
+
+    def set_accent(self, key: str):
+        self._palette.set_current(key)
 
     def set_appearance_label(self, mode: str):
         # 按钮显示“点一下会切到哪种模式”
@@ -124,6 +165,8 @@ class MainWindow(QMainWindow):
         self._refresh_meta()
         self._header._appearance_btn.clicked.connect(self._toggle_appearance)
         self._header.set_appearance_label(theme.MODE)
+        self._header._palette.picked.connect(self._set_accent)
+        self._header.set_accent(theme.ACCENT)
         outer.addWidget(self._header)
 
         splitter = QSplitter(Qt.Horizontal)
@@ -187,11 +230,20 @@ class MainWindow(QMainWindow):
     def _toggle_appearance(self):
         self._set_appearance("light" if theme.MODE == "dark" else "dark")
 
+    def _set_accent(self, key: str):
+        theme.apply(QApplication.instance(), theme.MODE, key)
+        self._config.accent = key
+        self._config.save()
+        self._header.set_accent(theme.ACCENT)
+        self._header.update()
+
     def _set_appearance(self, mode: str):
-        theme.apply(QApplication.instance(), mode)
+        theme.apply(QApplication.instance(), mode, theme.ACCENT)
         self._config.appearance = mode
         self._config.save()
         self._header.set_appearance_label(mode)
+        self._header.set_accent(theme.ACCENT)
+        self._header.update()
 
     def _get_config(self) -> Config:
         return self._config

@@ -2,11 +2,37 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QLabel, QMenu, QApplication, QPushButton,
 )
-from PySide6.QtGui import QAction
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QAction, QColor, QPainter, QPen
+from PySide6.QtCore import Signal, Qt, QPointF
 
 from . import theme
 from storage.models import BookmarkEntry
+
+
+class _PlusButton(QPushButton):
+    """自绘加号：字体基线会让 "+" 看起来偏上或偏下，直接画两条线保证水平垂直都居中。"""
+
+    def __init__(self, parent=None):
+        super().__init__("", parent)
+        self.setFixedSize(24, 24)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAccessibleName("新增")
+
+    def paintEvent(self, event):
+        super().paintEvent(event)          # 背景、边框、悬停态仍交给 QSS
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            pen = QPen(QColor(theme.CYAN))
+            pen.setWidthF(1.8)
+            pen.setCapStyle(Qt.RoundCap)
+            painter.setPen(pen)
+            cx, cy = self.width() / 2.0, self.height() / 2.0
+            r = min(self.width(), self.height()) * 0.26
+            painter.drawLine(QPointF(cx - r, cy), QPointF(cx + r, cy))
+            painter.drawLine(QPointF(cx, cy - r), QPointF(cx, cy + r))
+        finally:
+            painter.end()
 
 
 class BookmarkPanel(QWidget):
@@ -31,11 +57,9 @@ class BookmarkPanel(QWidget):
         header.setObjectName("eyebrow")
         header_row.addWidget(header)
 
-        self._add_btn = theme.variant(QPushButton("+"), "accent")
+        self._add_btn = theme.variant(_PlusButton(), "accent")
         self._add_btn.setObjectName("plus")
-        self._add_btn.setFixedSize(24, 24)
         self._add_btn.setToolTip("新增：把编辑区内容存进我的提示词")
-        self._add_btn.setCursor(Qt.PointingHandCursor)
         self._add_btn.clicked.connect(self.new_requested.emit)
         header_row.addWidget(self._add_btn)
 

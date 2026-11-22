@@ -30,13 +30,6 @@ DARK = {
     "TEXT": "#E8EEF8",
     "TEXT_DIM": "#9AA9C0",
     "TEXT_FAINT": "#6D7C97",
-    "CYAN": "#4FD6E8",
-    "PURPLE": "#A99BFF",
-    "CYAN_HI": "#6FE0EF",
-    "PURPLE_HI": "#BCB0FF",
-    "CYAN_LO": "#3FBECF",
-    "PURPLE_LO": "#9384EE",
-    "ACCENT_RGB": "79, 214, 232",
     "PRIMARY_TEXT": "#082028",
     "SEL_TEXT": "#082028",
     "SCROLL": "#2C3647",
@@ -58,13 +51,6 @@ LIGHT = {
     "TEXT": "#16202F",
     "TEXT_DIM": "#4B5A72",
     "TEXT_FAINT": "#6C7C93",
-    "CYAN": "#0B7A90",
-    "PURPLE": "#5B4DD1",
-    "CYAN_HI": "#0E8CA4",
-    "PURPLE_HI": "#6C5CE7",
-    "CYAN_LO": "#086A7D",
-    "PURPLE_LO": "#4C3FBB",
-    "ACCENT_RGB": "11, 122, 144",
     "PRIMARY_TEXT": "#FFFFFF",
     "SEL_TEXT": "#FFFFFF",
     "SCROLL": "#C8D2E0",
@@ -74,8 +60,66 @@ LIGHT = {
     "WARN": "#B8791B",
 }
 
+# 主体风格配色：名称 → (显示名, 主色, 副色)，主副两色组成按钮渐变
+ACCENTS = {
+    "cyan":   ("青紫", "#4FD6E8", "#A99BFF"),
+    "blue":   ("蓝",   "#3B82F6", "#22D3EE"),
+    "purple": ("紫",   "#A78BFA", "#7C3AED"),
+    "green":  ("绿",   "#34D399", "#22C55E"),
+    "yellow": ("黄",   "#FBBF24", "#F59E0B"),
+    "orange": ("橙",   "#FB923C", "#F97316"),
+    "pink":   ("粉",   "#F472B6", "#FB7185"),
+    "gray":   ("灰",   "#94A3B8", "#64748B"),
+}
+
 MODE = "dark"
+ACCENT = "cyan"
 globals().update(DARK)
+
+
+def _contrast(a: QColor, b: QColor) -> float:
+    def lum(c):
+        def f(v):
+            v /= 255
+            return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+        return 0.2126 * f(c.red()) + 0.7152 * f(c.green()) + 0.0722 * f(c.blue())
+    la, lb = lum(a), lum(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _readable_on_white(color: QColor) -> QColor:
+    """浅色模式下把强调色压暗到与白底对比 ≥4.5:1，保证文字可读。"""
+    out = QColor(color)
+    for _ in range(24):
+        if _contrast(out, QColor("#FFFFFF")) >= 4.5:
+            break
+        out = out.darker(112)
+    return out
+
+
+def _accent_tokens(mode: str, accent: str) -> dict:
+    _, main, second = ACCENTS.get(accent, ACCENTS["cyan"])
+    c1, c2 = QColor(main), QColor(second)
+    if mode == "light":
+        c1, c2 = _readable_on_white(c1), _readable_on_white(c2)
+    return {
+        "CYAN": c1.name(),
+        "PURPLE": c2.name(),
+        "CYAN_HI": c1.lighter(112).name(),
+        "PURPLE_HI": c2.lighter(112).name(),
+        "CYAN_LO": c1.darker(112).name(),
+        "PURPLE_LO": c2.darker(112).name(),
+        "ACCENT_RGB": f"{c1.red()}, {c1.green()}, {c1.blue()}",
+    }
+
+
+globals().update(_accent_tokens(MODE, ACCENT))
+
+
+def swatch_color(key: str) -> str:
+    """色盘里该风格在当前模式下应显示的颜色。"""
+    return _accent_tokens(MODE, key)["CYAN"]
 
 
 def _qss() -> str:
@@ -332,11 +376,13 @@ def _palette() -> QPalette:
     return pal
 
 
-def apply(app: QApplication, mode: str = "dark") -> None:
-    """应用配色；运行中再次调用即切换模式。"""
-    global MODE
+def apply(app: QApplication, mode: str = "dark", accent: str = "cyan") -> None:
+    """应用配色；运行中再次调用即切换模式或主体风格色。"""
+    global MODE, ACCENT
     MODE = "light" if mode == "light" else "dark"
+    ACCENT = accent if accent in ACCENTS else "cyan"
     globals().update(LIGHT if MODE == "light" else DARK)
+    globals().update(_accent_tokens(MODE, ACCENT))
 
     # 声明配色，macOS 原生标题栏才会跟着变（否则黑身白头）
     app.styleHints().setColorScheme(Qt.ColorScheme.Light if MODE == "light" else Qt.ColorScheme.Dark)

@@ -7,6 +7,7 @@ class Config:
     DEFAULT_BASE_URL = "https://api.deepseek.com"
     DEFAULT_MODEL = "deepseek-v4-flash"
     DEFAULT_APPEARANCE = "dark"
+    DEFAULT_ACCENT = "cyan"
 
     def __init__(self):
         self._config_dir = Path(os.environ.get("APPDATA", os.path.expanduser("~"))) / "prompt-manager"
@@ -23,6 +24,7 @@ class Config:
         self._data.setdefault("base_url", self.DEFAULT_BASE_URL)
         self._data.setdefault("model", self.DEFAULT_MODEL)
         self._data.setdefault("appearance", self.DEFAULT_APPEARANCE)
+        self._data.setdefault("accent", self.DEFAULT_ACCENT)
 
     def _load(self) -> dict:
         with open(self._config_file, "r", encoding="utf-8") as f:
@@ -64,6 +66,14 @@ class Config:
     @appearance.setter
     def appearance(self, value: str):
         self._data["appearance"] = "light" if value == "light" else "dark"
+
+    @property
+    def accent(self) -> str:
+        return self._data.get("accent", self.DEFAULT_ACCENT)
+
+    @accent.setter
+    def accent(self, value: str):
+        self._data["accent"] = value
 
     @property
     def data_dir(self) -> Path:

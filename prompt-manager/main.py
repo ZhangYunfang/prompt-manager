@@ -21,7 +21,7 @@ def main():
     app.setApplicationName("PromptManager")
 
     config = Config()
-    theme.apply(app, config.appearance)
+    theme.apply(app, config.appearance, config.accent)
 
     icon_path = _get_icon_path()
     if os.path.exists(icon_path):
