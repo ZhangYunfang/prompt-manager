@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QApplication,
+    QPushButton, QApplication, QMessageBox,
 )
 from PySide6.QtGui import QAction, QPainter, QLinearGradient, QColor
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -192,6 +192,7 @@ class MainWindow(QMainWindow):
 
         self._history_panel.entry_selected.connect(self._on_history_selected)
         self._history_panel.entry_deleted.connect(self._on_history_deleted)
+        self._history_panel.clear_requested.connect(self._on_history_clear_requested)
 
         self._editor_panel.history_created.connect(self._on_history_created)
         self._editor_panel.history_updated.connect(self._on_history_updated)
@@ -282,6 +283,24 @@ class MainWindow(QMainWindow):
 
     def _on_bookmark_selected(self, entry: BookmarkEntry):
         self._editor_panel.set_content(entry.content)
+
+    def _on_history_clear_requested(self):
+        """清空全部历史：不可撤销，必须二次确认。"""
+        total = len(self._data_store.get_history())
+        if not total:
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("清空历史记录")
+        box.setText(f"确定要清空全部 {total} 条历史记录吗？")
+        box.setInformativeText("此操作不可撤销。")
+        clear_btn = box.addButton("清空", QMessageBox.DestructiveRole)
+        box.addButton("取消", QMessageBox.RejectRole)
+        box.exec_()
+        if box.clickedButton() is not clear_btn:
+            return
+        self._data_store.clear_history()
+        self._history_panel.set_entries([])
 
     def _on_history_deleted(self, entry_id: str):
         self._data_store.delete_history(entry_id)

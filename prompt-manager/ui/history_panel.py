@@ -1,17 +1,59 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QListWidget,
-    QListWidgetItem, QLabel, QMenu,
+    QListWidgetItem, QLabel, QMenu, QPushButton,
 )
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence, QColor, QPainter, QPen
+from PySide6.QtCore import QPointF
 from PySide6.QtCore import Signal, Qt
 
 from . import theme
 from storage.models import HistoryEntry
 
 
+class _BrushButton(QPushButton):
+    """自绘小刷子（清空用）：斜向手柄 + 底部刷头，比字体图标更可控。"""
+
+    def __init__(self, parent=None):
+        super().__init__("", parent)
+        self.setFixedSize(22, 22)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAccessibleName("清空历史记录")
+
+    def paintEvent(self, event):
+        super().paintEvent(event)          # 背景/边框/悬停交给 QSS
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            w, h = self.width(), self.height()
+            color = QColor(theme.TEXT_DIM if not self.underMouse() else theme.CYAN)
+
+            handle = QPen(color)
+            handle.setWidthF(1.7)
+            handle.setCapStyle(Qt.RoundCap)
+            painter.setPen(handle)
+            painter.drawLine(QPointF(w * 0.72, h * 0.28), QPointF(w * 0.46, h * 0.54))
+
+            brush = QPen(color)
+            brush.setWidthF(4.2)
+            brush.setCapStyle(Qt.FlatCap)
+            painter.setPen(brush)
+            painter.drawLine(QPointF(w * 0.44, h * 0.56), QPointF(w * 0.24, h * 0.76))
+
+            tip = QPen(color)
+            tip.setWidthF(1.2)
+            tip.setCapStyle(Qt.RoundCap)
+            painter.setPen(tip)
+            for i in range(3):
+                x = w * (0.30 + i * 0.06)
+                painter.drawLine(QPointF(x, h * 0.78), QPointF(x - w * 0.04, h * 0.90))
+        finally:
+            painter.end()
+
+
 class HistoryPanel(QWidget):
     entry_selected = Signal(HistoryEntry)
     entry_deleted = Signal(str)
+    clear_requested = Signal()      # 标题后的刷子：请 MainWindow 确认并清空
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -29,6 +71,13 @@ class HistoryPanel(QWidget):
         header = QLabel("历史记录")
         header.setObjectName("eyebrow")
         header_row.addWidget(header)
+
+        self._clear_btn = theme.variant(_BrushButton(), "ghost")
+        self._clear_btn.setToolTip("清空全部历史记录")
+        self._clear_btn.setEnabled(False)
+        self._clear_btn.clicked.connect(self.clear_requested.emit)
+        header_row.addWidget(self._clear_btn)
+
         header_row.addStretch()
         self._count = QLabel("0")
         self._count.setObjectName("count")
@@ -81,7 +130,9 @@ class HistoryPanel(QWidget):
         self._sync_count()
 
     def _sync_count(self):
-        self._count.setText(str(self._list.count()))
+        count = self._list.count()
+        self._count.setText(str(count))
+        self._clear_btn.setEnabled(count > 0)
 
     def _refresh_item(self, entry_id: str, entry: HistoryEntry):
         for i in range(self._list.count()):

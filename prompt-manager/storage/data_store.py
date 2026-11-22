@@ -46,6 +46,10 @@ class DataStore:
         self._history.insert(0, entry)
         self._write_entries(self._history_file, self._history)
 
+    def clear_history(self):
+        self._history = []
+        self._write_entries(self._history_file, self._history)
+
     def delete_history(self, entry_id: str):
         self._history = [e for e in self._history if e.id != entry_id]
         self._write_entries(self._history_file, self._history)

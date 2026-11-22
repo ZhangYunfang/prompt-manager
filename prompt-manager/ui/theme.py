@@ -98,6 +98,46 @@ def _readable_on_white(color: QColor) -> QColor:
     return out
 
 
+def _hsl(hue: int, sat: float, light: float) -> str:
+    return QColor.fromHslF((hue % 360) / 360.0, max(0.0, min(1.0, sat)),
+                           max(0.0, min(1.0, light))).name()
+
+
+def _surfaces(mode: str, accent: str) -> dict:
+    """非默认风格时，把底色板按强调色色相重新着色（明度层次保持不变）。
+
+    默认的青紫风格保留原先手调的 #1a2236 系列，不做推导。
+    """
+    main = QColor(ACCENTS[accent][1])
+    hue = int(main.hueF() * 360) if main.hueF() >= 0 else 220
+    if mode == "light":
+        return {
+            "BG": _hsl(hue, 0.16, 0.952),
+            "SURFACE": "#FFFFFF",
+            "SURFACE_2": _hsl(hue, 0.18, 0.945),
+            "SURFACE_3": _hsl(hue, 0.20, 0.900),
+            "INPUT_BG": _hsl(hue, 0.12, 0.985),
+            "PRESSED": _hsl(hue, 0.20, 0.880),
+            "BORDER": _hsl(hue, 0.18, 0.870),
+            "BORDER_HI": _hsl(hue, 0.16, 0.760),
+            "SCROLL": _hsl(hue, 0.16, 0.820),
+            "SCROLL_HI": _hsl(hue, 0.16, 0.680),
+        }
+    sat = min(max(main.saturationF() * 0.45, 0.10), 0.26)
+    return {
+        "BG": _hsl(hue, sat, 0.157),
+        "SURFACE": _hsl(hue, sat, 0.184),
+        "SURFACE_2": _hsl(hue, sat, 0.221),
+        "SURFACE_3": _hsl(hue, sat, 0.261),
+        "INPUT_BG": _hsl(hue, sat * 0.85, 0.126),
+        "PRESSED": _hsl(hue, sat * 0.9, 0.110),
+        "BORDER": _hsl(hue, sat * 0.8, 0.247),
+        "BORDER_HI": _hsl(hue, sat * 0.9, 0.347),
+        "SCROLL": _hsl(hue, sat * 0.7, 0.226),
+        "SCROLL_HI": _hsl(hue, sat * 0.8, 0.343),
+    }
+
+
 def _accent_tokens(mode: str, accent: str) -> dict:
     _, main, second = ACCENTS.get(accent, ACCENTS["cyan"])
     c1, c2 = QColor(main), QColor(second)
@@ -383,6 +423,8 @@ def apply(app: QApplication, mode: str = "dark", accent: str = "cyan") -> None:
     ACCENT = accent if accent in ACCENTS else "cyan"
     globals().update(LIGHT if MODE == "light" else DARK)
     globals().update(_accent_tokens(MODE, ACCENT))
+    if ACCENT != "cyan":
+        globals().update(_surfaces(MODE, ACCENT))
 
     # 声明配色，macOS 原生标题栏才会跟着变（否则黑身白头）
     app.styleHints().setColorScheme(Qt.ColorScheme.Light if MODE == "light" else Qt.ColorScheme.Dark)
