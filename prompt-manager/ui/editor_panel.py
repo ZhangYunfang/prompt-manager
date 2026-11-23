@@ -6,7 +6,7 @@ from PySide6.QtCore import Signal, QThread, QTimer
 
 from api.deepseek_client import DeepSeekClient, StreamResult, FORMAT_SYSTEM_PROMPT, OPTIMIZE_SYSTEM_PROMPT
 from storage.models import HistoryEntry
-from . import theme
+from . import theme, icons
 
 
 class _StreamWorker(QThread):
@@ -140,35 +140,33 @@ class EditorPanel(QWidget):
         btn_layout.setSpacing(8)
 
         self._thinking_cb = QCheckBox("深度思考")
+        self._thinking_cb.setIcon(icons.make("chip", "dim", 14))
         self._thinking_cb.setToolTip("开启后 AI 会更仔细地推理，但耗时更长")
         btn_layout.addWidget(self._thinking_cb)
         btn_layout.addSpacing(4)
 
-        self._format_btn = QPushButton("整理格式")
+        self._format_btn = icons.IconButton("整理格式", "align", "text")
         self._format_btn.setToolTip("修正错字、标点、空格和换行")
         self._format_btn.clicked.connect(lambda: self._run_ai("format_cleanup"))
         btn_layout.addWidget(self._format_btn)
 
-        self._optimize_btn = theme.variant(QPushButton("优化提示词"), "primary")
+        self._optimize_btn = theme.variant(
+            icons.IconButton("优化提示词", "sparkle", "primary"), "primary")
         self._optimize_btn.setToolTip("增强提示词的清晰度和有效性")
         self._optimize_btn.clicked.connect(lambda: self._run_ai("optimize"))
         btn_layout.addWidget(self._optimize_btn)
 
-        self._save_btn = theme.variant(QPushButton("保存"), "ghost")
-        self._save_btn.clicked.connect(self._manual_save)
+        self._save_btn = theme.variant(icons.IconButton("保存", "star", "text"), "accent")
+        self._save_btn.setToolTip("保存到左侧「我的提示词」")
+        self._save_btn.clicked.connect(self._on_bookmark)
         btn_layout.addWidget(self._save_btn)
 
         btn_layout.addStretch()
 
-        self._new_btn = theme.variant(QPushButton("新增"), "ghost")
-        self._new_btn.setToolTip("新建一条提示词，清空编辑区并定位到输入框")
+        self._new_btn = theme.variant(icons.IconButton("新增", "plus", "text"), "ghost")
+        self._new_btn.setToolTip("新建一条提示词，清空输入框")
         self._new_btn.clicked.connect(self._on_new_prompt)
         btn_layout.addWidget(self._new_btn)
-
-        self._bookmark_btn = theme.variant(QPushButton("收藏"), "accent")
-        self._bookmark_btn.setToolTip("将当前内容添加到我的提示词")
-        self._bookmark_btn.clicked.connect(self._on_bookmark)
-        btn_layout.addWidget(self._bookmark_btn)
 
         layout.addLayout(btn_layout)
 
@@ -179,7 +177,7 @@ class EditorPanel(QWidget):
         result_row.addWidget(result_header)
         result_row.addStretch()
 
-        self._copy_btn = theme.variant(QPushButton("复制结果"), "ghost")
+        self._copy_btn = theme.variant(icons.IconButton("复制结果", "copy", "text"), "ghost")
         self._copy_btn.setEnabled(False)
         self._copy_btn.clicked.connect(self._copy_result)
         result_row.addWidget(self._copy_btn)
@@ -240,13 +238,6 @@ class EditorPanel(QWidget):
             self.history_created.emit(entry)
             self._request_title(entry.id, content)
 
-    def _manual_save(self):
-        content = self._editor.toPlainText().strip()
-        if not content:
-            QMessageBox.information(self, "提示", "没有内容可以保存")
-            return
-        self._ensure_saved()
-
     def _request_title(self, entry_id: str, content: str):
         config = self._config_getter()
         if not config.api_key:
@@ -273,18 +264,18 @@ class EditorPanel(QWidget):
         self._current_history_id = ""
         self._cached_for_content = ""
 
+    def new_prompt(self):
+        """供「我的提示词」面板的 + 按钮调用：清空输入框写新的。"""
+        self._on_new_prompt()
+
     def _on_new_prompt(self):
         self._on_clear()
         self._editor.setFocus()
 
-    def add_bookmark(self):
-        """供「我的提示词」面板的 + 按钮调用。"""
-        self._on_bookmark()
-
     def _on_bookmark(self):
         content = self._editor.toPlainText().strip()
         if not content:
-            QMessageBox.information(self, "提示", "没有内容可以收藏")
+            QMessageBox.information(self, "提示", "没有内容可以保存")
             return
         self._ensure_saved()
 

@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from config import Config
 from storage.data_store import DataStore
 from storage.models import HistoryEntry, BookmarkEntry
-from . import theme
+from . import theme, icons
 from .editor_panel import EditorPanel
 from .history_panel import HistoryPanel
 from .bookmark_panel import BookmarkPanel
@@ -125,7 +125,9 @@ class _HeaderBar(QWidget):
         self._palette = _PaletteBar()
         row.addWidget(self._palette, 0, Qt.AlignBottom)
 
-        self._appearance_btn = theme.variant(QPushButton("白天"), "ghost")
+        self._appearance_btn = theme.variant(
+            icons.IconButton("", "moon", "text", 18), "ghost")
+        self._appearance_btn.setFixedSize(34, 32)
         self._appearance_btn.setToolTip("切换黑夜 / 白天外观")
         self._appearance_btn.setCursor(Qt.PointingHandCursor)
         row.addWidget(self._appearance_btn, 0, Qt.AlignBottom)
@@ -140,8 +142,9 @@ class _HeaderBar(QWidget):
         self._palette.set_current(key)
 
     def set_appearance_label(self, mode: str):
-        # 按钮显示“点一下会切到哪种模式”
-        self._appearance_btn.setText("白天" if mode == "dark" else "黑夜")
+        """按钮显示「点一下会切到哪种模式」：现在是黑夜就画月亮（切回白天反之）。"""
+        self._appearance_btn.set_kind("moon" if mode == "dark" else "sun")
+        self._appearance_btn.setToolTip("切换到白天" if mode == "dark" else "切换到黑夜")
 
 
 class MainWindow(QMainWindow):
@@ -200,8 +203,8 @@ class MainWindow(QMainWindow):
 
         self._bookmark_panel.entry_selected.connect(self._on_bookmark_selected)
         self._bookmark_panel.entry_deleted.connect(self._on_bookmark_deleted)
-        # 「我的提示词」标题旁的 + ：把编辑区内容存进我的提示词
-        self._bookmark_panel.new_requested.connect(self._editor_panel.add_bookmark)
+        # 「我的提示词」标题旁的 + ：新增（清空输入框）
+        self._bookmark_panel.new_requested.connect(self._editor_panel.new_prompt)
 
     def _build_menu(self):
         menubar = self.menuBar()
@@ -236,6 +239,7 @@ class MainWindow(QMainWindow):
         self._config.accent = key
         self._config.save()
         self._header.set_accent(theme.ACCENT)
+        icons.recolor_all()
         self._header.update()
 
     def _set_appearance(self, mode: str):
@@ -244,6 +248,7 @@ class MainWindow(QMainWindow):
         self._config.save()
         self._header.set_appearance_label(mode)
         self._header.set_accent(theme.ACCENT)
+        icons.recolor_all()
         self._header.update()
 
     def _get_config(self) -> Config:
