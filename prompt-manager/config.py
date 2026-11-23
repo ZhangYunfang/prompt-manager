@@ -34,6 +34,10 @@ class Config:
         self._ensure_config_dir()
         with open(self._config_file, "w", encoding="utf-8") as f:
             json.dump(self._data, f, indent=2, ensure_ascii=False)
+        try:
+            os.chmod(self._config_file, 0o600)   # 含 API Key，只给本人读写
+        except OSError:
+            pass
 
     @property
     def api_key(self) -> str:
