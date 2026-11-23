@@ -109,6 +109,15 @@ def _draw(kind: str, p: QPainter, color: QColor) -> None:
         p.drawLine(QPointF(c - 3.9, c + 4.2), QPointF(c - 4.6, c + 5.8))
         p.drawLine(QPointF(c - 2.3, c + 4.2), QPointF(c - 3.0, c + 5.8))
 
+    elif kind == "palette":                    # 打开主体色板
+        p.drawEllipse(QPointF(c, c), 5.8, 5.4)
+        p.save()
+        p.setBrush(color)
+        p.setPen(Qt.NoPen)
+        for dx, dy in ((-1.9, -2.3), (2.1, -1.6), (2.4, 2.0), (-2.2, 2.2)):
+            p.drawEllipse(QPointF(c + dx, c + dy), 1.15, 1.15)
+        p.restore()
+
     elif kind == "copy":
         back = QPainterPath()
         back.addRoundedRect(QRectF(c - 5.6, c - 5.6, 7.4, 7.4), 1.8, 1.8)

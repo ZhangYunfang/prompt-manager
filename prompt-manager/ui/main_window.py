@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QApplication, QMessageBox,
+    QPushButton, QApplication, QMessageBox, QGridLayout,
 )
 from PySide6.QtGui import QAction, QPainter, QLinearGradient, QColor
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, QPoint
 
 from config import Config
 from storage.data_store import DataStore
@@ -60,39 +60,80 @@ class _AccentLine(QWidget):
             painter.end()
 
 
-class _PaletteBar(QWidget):
-    """方形色盘：一个色块一种主体风格，悬停显示名字，点击切换。"""
+class _SwatchPanel(QWidget):
+    """弹出的方格色板：4 列铺开，点一个方格即切换主体色并关闭。"""
+
+    picked = Signal(str)
+    COLS = 4
+
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.Popup)
+        self.setObjectName("palette")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(12, 12, 12, 12)
+        grid.setSpacing(8)
+        self._btns = {}
+        for i, (key, (label, _a, _b)) in enumerate(theme.ACCENTS.items()):
+            btn = QPushButton()
+            btn.setFixedSize(26, 26)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(label)
+            btn.setAccessibleName(f"主体配色 {label}")
+            btn.clicked.connect(lambda _checked=False, k=key: self._choose(k))
+            grid.addWidget(btn, i // self.COLS, i % self.COLS)
+            self._btns[key] = btn
+        self.refresh()
+
+    def refresh(self):
+        for k, btn in self._btns.items():
+            color = theme.swatch_color(k)
+            ring, width = (theme.TEXT, 2) if k == theme.ACCENT else (theme.BORDER, 1)
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {color}; border: {width}px solid {ring};"
+                f" border-radius: 6px; }}"
+                f"QPushButton:hover {{ border: 2px solid {theme.TEXT}; }}"
+            )
+
+    def _choose(self, key: str):
+        self.picked.emit(key)
+        self.hide()
+
+    def popup_at(self, anchor):
+        """贴在触发按钮下方、右对齐其右缘，且不越出屏幕可用区域。"""
+        self.refresh()
+        self.adjustSize()
+        pos = anchor.mapToGlobal(QPoint(anchor.width() - self.width(), anchor.height() + 8))
+        screen = QApplication.screenAt(pos) or QApplication.primaryScreen()
+        if screen is not None:
+            area = screen.availableGeometry()
+            pos.setX(max(area.left() + 8, min(pos.x(), area.right() - self.width() - 8)))
+            pos.setY(min(pos.y(), area.bottom() - self.height() - 8))
+        self.move(pos)
+        self.show()
+
+
+class _PaletteButton(icons.IconButton):
+    """页头入口：调色板图标，点一下弹出方格色板。"""
 
     picked = Signal(str)
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
-        self._btns = {}
-        for key, (label, _main, _second) in theme.ACCENTS.items():
-            btn = QPushButton()
-            btn.setFixedSize(18, 18)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setToolTip(f"主体风格：{label}")
-            btn.setAccessibleName(f"主体风格 {label}")
-            btn.clicked.connect(lambda _checked=False, k=key: self.picked.emit(k))
-            self._btns[key] = btn
-            layout.addWidget(btn)
+        super().__init__("", "palette", "text", 18, parent)
+        self._panel = _SwatchPanel(self)
+        self._panel.picked.connect(self.picked.emit)
+        self.setCursor(Qt.PointingHandCursor)
+        self.clicked.connect(self._open)
         self.set_current(theme.ACCENT)
 
+    def _open(self):
+        self._panel.popup_at(self)
+
     def set_current(self, key: str):
-        """当前风格加一圈描边；颜色随模式（深/浅）自动调整。"""
-        for k, btn in self._btns.items():
-            color = theme.swatch_color(k)
-            ring = theme.TEXT if k == key else theme.BORDER
-            width = 2 if k == key else 1
-            btn.setStyleSheet(
-                f"QPushButton {{ background: {color}; border: {width}px solid {ring};"
-                f" border-radius: 5px; }}"
-                f"QPushButton:hover {{ border: 2px solid {theme.TEXT}; }}"
-            )
+        self._panel.refresh()
+        label = theme.ACCENTS.get(key, ("青紫",))[0]
+        self.setToolTip(f"主体配色：{label}（点击切换）")
+        self.setAccessibleName(f"主体配色 {label}")
 
 
 class _HeaderBar(QWidget):
@@ -122,7 +163,8 @@ class _HeaderBar(QWidget):
         self._meta.setObjectName("dim")
         row.addWidget(self._meta, 0, Qt.AlignBottom)
 
-        self._palette = _PaletteBar()
+        self._palette = theme.variant(_PaletteButton(), "outline")
+        self._palette.setFixedSize(34, 32)
         row.addWidget(self._palette, 0, Qt.AlignBottom)
 
         self._appearance_btn = theme.variant(
