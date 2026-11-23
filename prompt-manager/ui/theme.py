@@ -2,9 +2,11 @@
 
 用法：`theme.apply(app, "dark" | "light")`，运行中可再次调用切换。
 模块级颜色名（theme.CYAN 等）会随当前模式更新，各面板随时取用即可。
+整体字号由 FONT_SCALE 统一放大缩小（设置页可调），所有字号都写在一个单位里。
 """
 
 import sys
+import weakref
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QPalette
@@ -78,7 +80,27 @@ ACCENTS = {
 
 MODE = "dark"
 ACCENT = "cyan"
+
+# 整体字号倍率：设置页 ±10% 调整，范围 80%~140%
+MIN_SCALE = 0.8
+MAX_SCALE = 1.4
+SCALE_STEP = 0.1
+FONT_SCALE = 1.0
+
 globals().update(DARK)
+
+
+def _f(px: float, cap: float = 0) -> str:
+    """把一个基准像素值按当前倍率换算成 QSS 字号；cap 防止图标按钮里的字撑破方块。"""
+    v = px * FONT_SCALE
+    if cap:
+        v = min(v, cap)
+    return f"{max(9, round(v))}px"
+
+
+def px(n: float) -> int:
+    """同理换算固定几何（方形小按钮边长等），避免放大字号后被裁掉。"""
+    return max(1, round(n * FONT_SCALE))
 
 
 def _contrast(a: QColor, b: QColor) -> float:
@@ -185,17 +207,17 @@ QWidget#panel {{
 
 /* 文字层级 */
 QLabel {{ background: transparent; }}
-QLabel#eyebrow {{ color: {t['TEXT_DIM']}; font-size: 11px; font-weight: 700; }}
-QLabel#brand {{ font-size: 17px; font-weight: 700; }}
-QLabel#brandSub {{ font-size: 10px; color: {t['TEXT_FAINT']}; }}
-QLabel#dim {{ color: {t['TEXT_DIM']}; font-size: 11px; }}
+QLabel#eyebrow {{ color: {t['TEXT_DIM']}; font-size: {_f(12)}; font-weight: 700; }}
+QLabel#brand {{ font-size: {_f(18)}; font-weight: 700; }}
+QLabel#brandSub {{ font-size: {_f(11)}; color: {t['TEXT_FAINT']}; }}
+QLabel#dim {{ color: {t['TEXT_DIM']}; font-size: {_f(12)}; }}
 QLabel#count {{
     color: {t['CYAN']};
     background: rgba({t['ACCENT_RGB']}, 12%);
     border: 1px solid rgba({t['ACCENT_RGB']}, 30%);
     border-radius: 9px;
     padding: 1px 8px;
-    font-size: 10px;
+    font-size: {_f(11)};
 }}
 
 /* 按钮 */
@@ -204,6 +226,7 @@ QPushButton {{
     color: {t['TEXT']};
     border: 1px solid {t['BORDER']};
     border-radius: 9px;
+    font-size: {_f(13)};
     padding: 7px 16px;
 }}
 QPushButton:hover {{ background: {t['SURFACE_3']}; border-color: {t['BORDER_HI']}; }}
@@ -231,7 +254,7 @@ QPushButton[variant="primary"]:disabled {{
 
 QPushButton#plus {{
     padding: 0;
-    font-size: 15px;
+    font-size: {_f(16, cap=19)};
     font-weight: 700;
     border-radius: 7px;
 }}
@@ -291,6 +314,7 @@ QLineEdit {{
     background: {t['INPUT_BG']};
     border: 1px solid {t['BORDER']};
     border-radius: 9px;
+    font-size: {_f(14)};
     padding: 7px 11px;
     color: {t['TEXT']};
 }}
@@ -313,6 +337,7 @@ QListWidget {{
     background: transparent;
     border: none;
     outline: 0;
+    font-size: {_f(14)};
     padding: 2px;
 }}
 QListWidget::item {{
@@ -344,7 +369,7 @@ QSplitter::handle:horizontal {{ width: 10px; }}
 QSplitter::handle:hover {{ background: rgba({t['ACCENT_RGB']}, 14%); border-radius: 5px; }}
 
 /* 勾选框 */
-QCheckBox {{ color: {t['TEXT_DIM']}; spacing: 8px; }}
+QCheckBox {{ color: {t['TEXT_DIM']}; font-size: {_f(13)}; spacing: 8px; }}
 QCheckBox:hover {{ color: {t['TEXT']}; }}
 QCheckBox::indicator {{
     width: 15px;
@@ -364,13 +389,14 @@ QMenu {{
     background: {t['SURFACE']};
     border: 1px solid {t['BORDER_HI']};
     border-radius: 10px;
+    font-size: {_f(13)};
     padding: 6px;
     color: {t['TEXT']};
 }}
 QMenu::item {{ padding: 7px 18px; border-radius: 7px; }}
 QMenu::item:selected {{ background: rgba({t['ACCENT_RGB']}, 16%); color: {t['TEXT']}; }}
 QMenu::separator {{ height: 1px; background: {t['BORDER']}; margin: 5px 8px; }}
-QMenuBar {{ background: {t['BG']}; color: {t['TEXT_DIM']}; }}
+QMenuBar {{ background: {t['BG']}; color: {t['TEXT_DIM']}; font-size: {_f(13)}; }}
 QMenuBar::item {{ padding: 4px 10px; background: transparent; border-radius: 6px; }}
 QMenuBar::item:selected {{ background: {t['SURFACE_2']}; color: {t['TEXT']}; }}
 QToolTip {{
@@ -378,6 +404,7 @@ QToolTip {{
     color: {t['TEXT']};
     border: 1px solid {t['BORDER_HI']};
     border-radius: 8px;
+    font-size: {_f(13)};
     padding: 6px 9px;
 }}
 
@@ -386,6 +413,7 @@ QGroupBox {{
     border: 1px solid {t['BORDER']};
     border-radius: 12px;
     margin-top: 14px;
+    font-size: {_f(13)};
     padding: 12px 12px 10px 12px;
     color: {t['TEXT_DIM']};
 }}
@@ -414,12 +442,33 @@ def variant(widget: QWidget, name: str) -> QWidget:
 
 
 def mono_font(size: int = 13, weight: QFont.Weight = QFont.Normal) -> QFont:
-    """等宽字体：提示词正文用，读代码块更整齐。"""
+    """等宽字体：提示词正文用，读代码块更整齐。字号跟随整体倍率。"""
     font = QFont()
     font.setFamilies(MONO_FAMILIES)
-    font.setPointSize(size)
+    font.setPointSizeF(size * FONT_SCALE)
     font.setWeight(weight)
     return font
+
+
+# 自己设过 QFont 的控件（编辑器正文）不会被 QSS 覆盖，切倍率时需要重设一次
+_MONO_WIDGETS = []
+
+
+def apply_mono(widget: QWidget, size: int = 13) -> QWidget:
+    """给正文编辑框套等宽字体，并登记以便整体字号变化时同步。"""
+    widget.setFont(mono_font(size))
+    _MONO_WIDGETS.append((weakref.ref(widget), size))
+    return widget
+
+
+def _refresh_mono():
+    alive = []
+    for ref, size in _MONO_WIDGETS:
+        widget = ref()
+        if widget is not None:
+            widget.setFont(mono_font(size))
+            alive.append((ref, size))
+    _MONO_WIDGETS[:] = alive
 
 
 def accent_pair():
@@ -448,11 +497,17 @@ def _palette() -> QPalette:
     return pal
 
 
-def apply(app: QApplication, mode: str = "dark", accent: str = "cyan") -> None:
-    """应用配色；运行中再次调用即切换模式或主体风格色。"""
-    global MODE, ACCENT
+def apply(app: QApplication, mode: str = "dark", accent: str = "cyan",
+          scale: float = None) -> None:
+    """应用配色与字号；运行中再次调用即切换模式、主体风格色或整体字号。
+
+    scale 省略时沿用当前倍率，所以只切配色/风格的调用点不用改。
+    """
+    global MODE, ACCENT, FONT_SCALE
     MODE = "light" if mode == "light" else "dark"
     ACCENT = accent if accent in ACCENTS else "cyan"
+    if scale is not None:
+        FONT_SCALE = max(MIN_SCALE, min(MAX_SCALE, round(float(scale), 2)))
     globals().update(LIGHT if MODE == "light" else DARK)
     globals().update(_accent_tokens(MODE, ACCENT))
     if ACCENT != "cyan":
@@ -464,8 +519,9 @@ def apply(app: QApplication, mode: str = "dark", accent: str = "cyan") -> None:
 
     font = QFont()
     font.setFamilies(UI_FAMILIES)
-    font.setPointSize(13)
+    font.setPointSizeF(13 * FONT_SCALE)
     app.setFont(font)
 
     app.setPalette(_palette())
     app.setStyleSheet(_qss())
+    _refresh_mono()

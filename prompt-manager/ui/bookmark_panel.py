@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem,
     QLabel, QMenu, QApplication, QPushButton,
 )
 from PySide6.QtGui import QAction
@@ -45,25 +45,43 @@ class BookmarkPanel(QWidget):
         header_row.addWidget(self._count)
         layout.addLayout(header_row)
 
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("搜索标题、标签或内容…")
+        self._search.setClearButtonEnabled(True)
+        self._search.textChanged.connect(self._apply_filter)
+        layout.addWidget(self._search)
+
         self._list = QListWidget()
         self._list.setContextMenuPolicy(Qt.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._on_context_menu)
-        self._list.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self._list.itemClicked.connect(self._on_item_clicked)
         self._list.keyPressEvent = self._list_key_press
         layout.addWidget(self._list)
 
     def set_entries(self, entries: list[BookmarkEntry]):
         self._all_entries = list(entries)
-        self._rebuild_list(entries)
+        self._apply_filter()
 
     def add_entry(self, entry: BookmarkEntry):
         self._all_entries.insert(0, entry)
-        self._prepend_item(entry)
+        self._apply_filter()
 
-    def _prepend_item(self, entry: BookmarkEntry):
-        item = self._make_item(entry)
-        self._list.insertItem(0, item)
-        self._sync_count()
+    def _apply_filter(self, _keyword: str = ""):
+        """标题、标签、正文任一命中即可；搜索框空着就显示全部。
+
+        关键词一律从搜索框现读，避免「新增条目时忘了传当前词」把过滤绕过去。
+        """
+        kw = self._search.text().strip().lower()
+        if not kw:
+            self._rebuild_list(self._all_entries)
+            return
+        hits = [
+            e for e in self._all_entries
+            if kw in e.content.lower()
+            or kw in (e.title or "").lower()
+            or any(kw in tag.lower() for tag in e.tags)
+        ]
+        self._rebuild_list(hits)
 
     def _rebuild_list(self, entries: list[BookmarkEntry]):
         self._list.clear()
@@ -82,13 +100,13 @@ class BookmarkPanel(QWidget):
 
         item = QListWidgetItem(display)
         item.setData(Qt.UserRole, entry.id)
-        item.setToolTip(f"双击加载到编辑器\n右键复制或删除\n\n{entry.content[:300]}")
+        item.setToolTip(f"单击加载到编辑器\n右键复制或删除\n\n{entry.content[:300]}")
         return item
 
     def _copy_entry(self, entry: BookmarkEntry):
         QApplication.clipboard().setText(entry.content)
 
-    def _on_item_double_clicked(self, item: QListWidgetItem):
+    def _on_item_clicked(self, item: QListWidgetItem):
         entry_id = item.data(Qt.UserRole)
         for entry in self._all_entries:
             if entry.id == entry_id:

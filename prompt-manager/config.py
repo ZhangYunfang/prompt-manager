@@ -8,6 +8,9 @@ class Config:
     DEFAULT_MODEL = "deepseek-v4-flash"
     DEFAULT_APPEARANCE = "dark"
     DEFAULT_ACCENT = "cyan"
+    DEFAULT_FONT_SCALE = 1.0
+    MIN_FONT_SCALE = 0.8
+    MAX_FONT_SCALE = 1.4
 
     def __init__(self):
         self._config_dir = Path(os.environ.get("APPDATA", os.path.expanduser("~"))) / "prompt-manager"
@@ -25,6 +28,7 @@ class Config:
         self._data.setdefault("model", self.DEFAULT_MODEL)
         self._data.setdefault("appearance", self.DEFAULT_APPEARANCE)
         self._data.setdefault("accent", self.DEFAULT_ACCENT)
+        self._data.setdefault("font_scale", self.DEFAULT_FONT_SCALE)
 
     def _load(self) -> dict:
         with open(self._config_file, "r", encoding="utf-8") as f:
@@ -78,6 +82,18 @@ class Config:
     @accent.setter
     def accent(self, value: str):
         self._data["accent"] = value
+
+    @property
+    def font_scale(self) -> float:
+        try:
+            return float(self._data.get("font_scale", self.DEFAULT_FONT_SCALE))
+        except (TypeError, ValueError):
+            return self.DEFAULT_FONT_SCALE
+
+    @font_scale.setter
+    def font_scale(self, value: float):
+        self._data["font_scale"] = round(
+            max(self.MIN_FONT_SCALE, min(self.MAX_FONT_SCALE, float(value))), 2)
 
     @property
     def data_dir(self) -> Path:

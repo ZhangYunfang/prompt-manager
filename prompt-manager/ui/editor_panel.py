@@ -131,7 +131,7 @@ class EditorPanel(QWidget):
 
         self._editor = QPlainTextEdit()
         self._editor.setPlaceholderText("在这里输入提示词…")
-        self._editor.setFont(theme.mono_font(13))
+        theme.apply_mono(self._editor, 13)
         self._editor.setTabChangesFocus(True)
         self._editor.textChanged.connect(self._on_text_changed)
         layout.addWidget(self._editor, 3)
@@ -186,7 +186,7 @@ class EditorPanel(QWidget):
         self._result_area = QPlainTextEdit()
         self._result_area.setReadOnly(True)
         self._result_area.setPlaceholderText("整理或优化后的结果将显示在这里…")
-        self._result_area.setFont(theme.mono_font(13))
+        theme.apply_mono(self._result_area, 13)
         layout.addWidget(self._result_area, 2)
 
         self._status = QLabel("字数 0")
