@@ -242,6 +242,23 @@ QPushButton[variant="accent"]:hover {{
     border-color: {t['CYAN']};
 }}
 
+QPushButton[variant="outline"] {{
+    background: transparent;
+    color: {t['TEXT']};
+    border: 1px solid {t['BORDER_HI']};
+}}
+QPushButton[variant="outline"]:hover {{
+    background: rgba({t['ACCENT_RGB']}, 10%);
+    border-color: {t['CYAN']};
+    color: {t['CYAN']};
+}}
+QPushButton[variant="outline"]:pressed {{ background: rgba({t['ACCENT_RGB']}, 20%); }}
+QPushButton[variant="outline"]:disabled {{
+    color: {t['TEXT_FAINT']};
+    background: transparent;
+    border-color: {t['BORDER']};
+}}
+
 QPushButton[variant="ghost"] {{
     background: transparent;
     color: {t['TEXT_DIM']};

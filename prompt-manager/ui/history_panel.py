@@ -72,7 +72,7 @@ class HistoryPanel(QWidget):
         header.setObjectName("eyebrow")
         header_row.addWidget(header)
 
-        self._clear_btn = theme.variant(_BrushButton(), "ghost")
+        self._clear_btn = theme.variant(_BrushButton(), "outline")
         self._clear_btn.setToolTip("清空全部历史记录")
         self._clear_btn.setEnabled(False)
         self._clear_btn.clicked.connect(self.clear_requested.emit)

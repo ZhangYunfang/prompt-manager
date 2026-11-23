@@ -163,7 +163,7 @@ class EditorPanel(QWidget):
 
         btn_layout.addStretch()
 
-        self._new_btn = theme.variant(icons.IconButton("新增", "plus", "text"), "ghost")
+        self._new_btn = theme.variant(icons.IconButton("新增", "plus", "text"), "outline")
         self._new_btn.setToolTip("新建一条提示词，清空输入框")
         self._new_btn.clicked.connect(self._on_new_prompt)
         btn_layout.addWidget(self._new_btn)
