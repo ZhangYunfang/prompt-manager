@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "提示词管理器 · 桌面端架构",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-prompt-manager-20261123-140616/prompt-manager-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/ZhangYunfang/prompt-manager",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "e9e26762f305b4b33033da20b3cc584461e50d10"
+    }
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "使用者",
+      "sublabel": "本机桌面操作",
+      "icon": "person",
+      "pos": [10, 290],
+      "size": [110, 64]
+    },
+    {
+      "id": "window",
+      "type": "frontend",
+      "label": "主窗口",
+      "sublabel": "PySide6 · 三栏 QSplitter",
+      "tag": "信号总线",
+      "pos": [210, 285],
+      "size": [170, 76],
+      "sources": [
+        { "path": "prompt-manager/ui/main_window.py", "line": 192, "end_line": 227 }
+      ]
+    },
+    {
+      "id": "editor",
+      "type": "frontend",
+      "label": "编辑区",
+      "sublabel": "格式化 · 优化 · 预取标题",
+      "pos": [470, 285],
+      "size": [155, 76],
+      "sources": [
+        { "path": "prompt-manager/ui/editor_panel.py", "line": 86, "end_line": 112 }
+      ]
+    },
+    {
+      "id": "client",
+      "type": "backend",
+      "label": "DeepSeek 客户端",
+      "sublabel": "requests · SSE 流式",
+      "pos": [710, 285],
+      "size": [150, 76],
+      "sources": [
+        { "path": "prompt-manager/api/deepseek_client.py", "line": 71, "end_line": 113 }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "cloud",
+      "label": "DeepSeek API",
+      "sublabel": "POST /chat/completions",
+      "pos": [950, 290],
+      "size": [150, 64]
+    },
+    {
+      "id": "settings",
+      "type": "frontend",
+      "label": "设置对话框",
+      "sublabel": "API Key · 模型 · 测连接",
+      "pos": [210, 120],
+      "size": [150, 64],
+      "sources": [
+        { "path": "prompt-manager/ui/settings_dialog.py", "line": 31, "end_line": 57 }
+      ]
+    },
+    {
+      "id": "config",
+      "type": "database",
+      "label": "settings.json",
+      "sublabel": "api_key · model · 主题",
+      "tag": "chmod 0600",
+      "pos": [470, 120],
+      "size": [150, 64],
+      "sources": [
+        { "path": "prompt-manager/config.py", "line": 13, "end_line": 38 }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "本地 JSON 存储",
+      "sublabel": "history / bookmarks",
+      "pos": [210, 460],
+      "size": [170, 64],
+      "sources": [
+        { "path": "prompt-manager/storage/data_store.py", "line": 11, "end_line": 31 }
+      ]
+    }
+  ],
+  "connections": [
+    { "id": "user-to-window", "from": "user", "to": "window", "label": "输入提示词", "variant": "emphasis" },
+    { "id": "window-to-editor", "from": "window", "to": "editor", "label": "回填内容" },
+    { "id": "editor-to-client", "from": "editor", "to": "client", "label": "格式化/优化" },
+    { "id": "client-to-api", "from": "client", "to": "api", "label": "HTTPS", "variant": "security" },
+    { "id": "window-to-store", "from": "window", "to": "store", "label": "读写历史/收藏" },
+    { "id": "config-to-editor", "from": "config", "to": "editor", "label": "api_key·model" },
+    { "id": "settings-to-config", "from": "settings", "to": "config", "label": "保存配置" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "界面与主题",
+      "items": [
+        "顶栏品牌行 + 流光强调线，中段三栏可拖拽分隔",
+        "黑夜 #1a2236 / 白天双外观 × 12 色主体方格色板",
+        "切色或切主题后全部线性图标按新主体色重绘"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "编辑与 AI",
+      "items": [
+        "格式化清理与提示词优化都走流式输出，50ms 轮询回填",
+        "停止输入 2 秒后预取标题与标签，省一次弹窗",
+        "设置页可测连接；未配 Key 时按钮直接提示先配置"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "本地数据",
+      "items": [
+        "三个文件同住 ~/prompt-manager/，全部留在本机",
+        "写盘走 tmp 再 replace，避免半截 JSON",
+        "settings.json 含 API Key，写入后立即 chmod 0600"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "分发",
+      "items": [
+        "PyInstaller 单文件打包，run.sh / run.bat 免装启动",
+        "发布物是 GitHub Release 上的 macOS arm64 zip"
+      ]
+    }
+  ]
+}
