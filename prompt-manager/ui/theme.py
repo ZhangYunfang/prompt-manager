@@ -241,6 +241,17 @@ QPushButton[variant="accent"]:hover {{
     background: rgba({t['ACCENT_RGB']}, 12%);
     border-color: {t['CYAN']};
 }}
+QPushButton[variant="accent"]:pressed,
+QPushButton[variant="accent"]:checked {{
+    background: rgba({t['ACCENT_RGB']}, 22%);
+    border-color: {t['CYAN']};
+    color: {t['CYAN_HI']};
+}}
+QPushButton[variant="accent"]:disabled {{
+    color: {t['TEXT_FAINT']};
+    border-color: {t['BORDER']};
+    background: transparent;
+}}
 
 QPushButton[variant="outline"] {{
     background: transparent;

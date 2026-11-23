@@ -91,6 +91,24 @@ def _draw(kind: str, p: QPainter, color: QColor) -> None:
             p.drawLine(QPointF(c - 5.9, c + a), QPointF(c - 4.4, c + a))
             p.drawLine(QPointF(c + 4.4, c + a), QPointF(c + 5.9, c + a))
 
+    elif kind == "brush":                      # 清空历史
+        handle = QPen(color)
+        handle.setWidthF(1.5)
+        handle.setCapStyle(Qt.RoundCap)
+        p.setPen(handle)
+        p.drawLine(QPointF(c + 3.4, c - 3.4), QPointF(c + 0.3, c + 0.3))
+        head = QPen(color)
+        head.setWidthF(3.6)
+        head.setCapStyle(Qt.FlatCap)
+        p.setPen(head)
+        p.drawLine(QPointF(c - 0.2, c + 0.8), QPointF(c - 3.4, c + 4.0))
+        tip = QPen(color)
+        tip.setWidthF(1.1)
+        tip.setCapStyle(Qt.RoundCap)
+        p.setPen(tip)
+        p.drawLine(QPointF(c - 3.9, c + 4.2), QPointF(c - 4.6, c + 5.8))
+        p.drawLine(QPointF(c - 2.3, c + 4.2), QPointF(c - 3.0, c + 5.8))
+
     elif kind == "copy":
         back = QPainterPath()
         back.addRoundedRect(QRectF(c - 5.6, c - 5.6, 7.4, 7.4), 1.8, 1.8)
