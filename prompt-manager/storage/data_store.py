@@ -81,6 +81,17 @@ class DataStore:
         self._bookmarks.insert(0, entry)
         self._write_entries(self._bookmarks_file, self._bookmarks)
 
+    def update_bookmark(self, entry_id: str, title: str = None, tags: list = None):
+        for entry in self._bookmarks:
+            if entry.id == entry_id:
+                if title is not None:
+                    entry.title = title
+                if tags is not None:
+                    entry.tags = list(tags)
+                self._write_entries(self._bookmarks_file, self._bookmarks)
+                return entry
+        return None
+
     def delete_bookmark(self, entry_id: str):
         self._bookmarks = [e for e in self._bookmarks if e.id != entry_id]
         self._write_entries(self._bookmarks_file, self._bookmarks)

@@ -12,6 +12,7 @@ from storage.models import BookmarkEntry
 class BookmarkPanel(QWidget):
     entry_selected = Signal(BookmarkEntry)
     entry_deleted = Signal(str)
+    entry_edit_requested = Signal(object)   # 右键「修改标题和标签」→ 交给主窗口开对话框
     new_requested = Signal()      # 标题旁的「+」：新增一条我的提示词
 
     def __init__(self, parent=None):
@@ -100,7 +101,7 @@ class BookmarkPanel(QWidget):
 
         item = QListWidgetItem(display)
         item.setData(Qt.UserRole, entry.id)
-        item.setToolTip(f"单击加载到编辑器\n右键复制或删除\n\n{entry.content[:300]}")
+        item.setToolTip(f"单击加载到编辑器\n右键修改标题/标签、复制或删除\n\n{entry.content[:300]}")
         return item
 
     def _copy_entry(self, entry: BookmarkEntry):
@@ -120,6 +121,10 @@ class BookmarkPanel(QWidget):
         entry_id = item.data(Qt.UserRole)
         menu = QMenu(self)
 
+        edit_action = QAction("修改标题和标签…", self)
+        edit_action.triggered.connect(lambda checked=False, eid=entry_id: self._request_edit(eid))
+        menu.addAction(edit_action)
+
         copy_action = QAction("复制内容", self)
         copy_action.triggered.connect(lambda checked=False, eid=entry_id: self._do_copy(eid))
         menu.addAction(copy_action)
@@ -131,6 +136,16 @@ class BookmarkPanel(QWidget):
         menu.addAction(delete_action)
 
         menu.exec_(self._list.viewport().mapToGlobal(pos))
+
+    def _request_edit(self, entry_id: str):
+        for entry in self._all_entries:
+            if entry.id == entry_id:
+                self.entry_edit_requested.emit(entry)
+                return
+
+    def refresh_entries(self):
+        """标题/标签改完后重刷列表（同时按当前搜索词重算，可能进出结果集）。"""
+        self._apply_filter()
 
     def _do_copy(self, entry_id: str):
         for entry in self._all_entries:

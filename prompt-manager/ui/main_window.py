@@ -245,6 +245,7 @@ class MainWindow(QMainWindow):
 
         self._bookmark_panel.entry_selected.connect(self._on_bookmark_selected)
         self._bookmark_panel.entry_deleted.connect(self._on_bookmark_deleted)
+        self._bookmark_panel.entry_edit_requested.connect(self._on_bookmark_edit_requested)
         # 「我的提示词」标题旁的 + ：新增（清空输入框）
         self._bookmark_panel.new_requested.connect(self._editor_panel.new_prompt)
 
@@ -330,6 +331,15 @@ class MainWindow(QMainWindow):
 
     def _on_bookmark_selected(self, entry: BookmarkEntry):
         self._editor_panel.set_content(entry.content)
+
+    def _on_bookmark_edit_requested(self, entry: BookmarkEntry):
+        """右键「修改标题和标签」：预填现有值，保存后落盘并刷新列表。"""
+        dialog = BookmarkDialog(self._get_config, entry.content, self, entry=entry)
+        if dialog.exec_() != BookmarkDialog.DialogCode.Accepted:
+            return
+        title, tags = dialog.get_result()
+        if self._data_store.update_bookmark(entry.id, title=title, tags=tags):
+            self._bookmark_panel.refresh_entries()
 
     def _on_history_clear_requested(self):
         """清空全部历史：不可撤销，必须二次确认。"""

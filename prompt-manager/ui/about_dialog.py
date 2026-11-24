@@ -24,7 +24,7 @@ class AboutDialog(QDialog):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        version = QLabel("版本 1.5.0")
+        version = QLabel("版本 1.6.0")
         version.setObjectName("dim")
         version.setAlignment(Qt.AlignCenter)
         layout.addWidget(version)

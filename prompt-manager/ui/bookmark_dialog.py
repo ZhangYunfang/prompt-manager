@@ -34,17 +34,23 @@ class _TagSuggestWorker(QThread):
 
 
 class BookmarkDialog(QDialog):
-    def __init__(self, config_getter, content: str, parent=None):
+    def __init__(self, config_getter, content: str, parent=None, entry=None):
+        """entry 为空＝新增收藏（让 AI 提议标题/标签）；给了 entry＝修改，直接预填、不再请求 AI。"""
         super().__init__(parent)
         self._config_getter = config_getter
         self._content = content
+        self._entry = entry
         self._tags = []
         self._title = ""
         self._worker = None
-        self.setWindowTitle("添加收藏")
+        self._checkboxes = []
+        self.setWindowTitle("修改提示词" if entry else "添加收藏")
         self.setMinimumWidth(400)
         self._build_ui()
-        self._load_suggestions()
+        if entry:
+            self._load_existing()
+        else:
+            self._load_suggestions()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -70,12 +76,30 @@ class BookmarkDialog(QDialog):
         layout.addWidget(self._custom_tags)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("收藏")
+        buttons.button(QDialogButtonBox.Ok).setText("保存" if self._entry else "收藏")
         buttons.button(QDialogButtonBox.Cancel).setText("取消")
         theme.variant(buttons.button(QDialogButtonBox.Ok), "primary")
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _load_existing(self):
+        """修改模式：把现有标题与标签填进去，不请求 AI。"""
+        self._title_edit.setPlaceholderText("留空则用正文首行")
+        self._title_edit.setText(self._entry.title)
+        self._title_edit.setFocus()
+        self._status_label.hide()
+        self._tags_group.setTitle("现有标签")
+        for tag in self._entry.tags:
+            if isinstance(tag, str) and tag.strip():
+                cb = QCheckBox(tag, self._tags_group)
+                cb.setChecked(True)
+                self._checkboxes.append(cb)
+                self._tags_layout.addWidget(cb)
+        if not self._checkboxes:
+            hint = QLabel("还没有标签，可在下面添加")
+            hint.setStyleSheet(f"color: {theme.TEXT_FAINT};")
+            self._tags_layout.addWidget(hint)
 
     def _load_suggestions(self):
         config = self._config_getter()
@@ -111,17 +135,18 @@ class BookmarkDialog(QDialog):
             self._status_label.setStyleSheet(f"color: {theme.DANGER};")
 
     def _on_accept(self):
-        if self._title_edit.text().strip():
-            self._title = self._title_edit.text().strip()
+        text = self._title_edit.text().strip()
+        # 修改模式下允许把标题清空（列表退回显示正文首行）；新增模式空标题就沿用 AI 结果
+        if text or self._entry:
+            self._title = text
 
-        selected = []
-        if hasattr(self, '_checkboxes'):
-            for cb in self._checkboxes:
-                if cb.isChecked():
-                    selected.append(cb.text())
-
+        selected = [cb.text() for cb in self._checkboxes if cb.isChecked()]
         custom = [t.strip() for t in self._custom_tags.text().split(",") if t.strip()]
-        self._tags = selected + custom
+        tags = []
+        for tag in selected + custom:      # 自定义标签可能和已有标签重名，去重保序
+            if tag not in tags:
+                tags.append(tag)
+        self._tags = tags
         self.accept()
 
     def get_result(self):
