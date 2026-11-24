@@ -2,6 +2,14 @@
 
 本项目的界面改版记录。打包产物与发版资产见 GitHub Releases。
 
+## 1.6.2
+
+**Windows 启动报错修复**
+- 换成文件夹版：解压后进 `PromptManager` 文件夹双击 `PromptManager.exe`
+- 原因：单文件版每次启动都要把 `PySide6\Qt6Core.dll`（10 MB）等依赖从 exe 里解压到临时目录，杀软拦截或受限的临时目录会让这一步失败，报 `Failed to extract PySide6\Qt6Core.dll decompression resulted in return code -1`。文件夹版没有任何运行时解压步骤，这类报错结构上不会再出现
+- 同时关闭 UPX 压缩（同属这类启动解压异常的常见诱因）
+- Linux 同步改为文件夹版（`tar.gz` 解压得到 `PromptManager/`）
+
 ## 1.6.1
 
 **应用图标**

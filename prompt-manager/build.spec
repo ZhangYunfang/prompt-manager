@@ -51,7 +51,7 @@ _common = dict(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     console=False,
     disable_windowed_traceback=False,
@@ -81,21 +81,23 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': '提示词管理',
             'CFBundleDisplayName': '提示词管理',
-            'CFBundleShortVersionString': '1.6.1',
-            'CFBundleVersion': '1.6.1',
+            'CFBundleShortVersionString': '1.6.2',
+            'CFBundleVersion': '1.6.2',
             'NSHighResolutionCapable': True,
         },
     )
 else:
-    # Windows / Linux：单文件可执行
+    # Windows / Linux：onedir（文件夹版）。
+    # 早先是单文件，但单文件启动时要把 PySide6/Qt6Core.dll 等从 exe 里解压到临时目录，
+    # 杀软拦截或受限的临时目录会让这一步失败，报
+    # "Failed to extract PySide6\Qt6Core.dll decompression resulted in return code -1"。
+    # 文件夹版没有任何运行时解压步骤，这类报错就不可能再出现。
     exe = EXE(
         pyz,
         a.scripts,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
         [],
+        exclude_binaries=True,
         icon='icon-rounded.ico',
-        runtime_tmpdir=None,
         **_common,
     )
+    coll = COLLECT(exe, a.binaries, a.datas, name='PromptManager')

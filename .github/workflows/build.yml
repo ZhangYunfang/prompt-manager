@@ -62,7 +62,10 @@ jobs:
         shell: pwsh
         run: |
           $v = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME -replace '^v','' } else { 'dev' }
-          Compress-Archive -Path dist\PromptManager.exe -DestinationPath "PromptManager-$v-windows-${{ matrix.arch }}.zip"
+          # 文件夹版：整包打成 zip，解压后进 PromptManager\ 双击 PromptManager.exe
+          if (-not (Test-Path 'dist\PromptManager\PromptManager.exe')) { throw '缺少 dist\PromptManager\PromptManager.exe' }
+          if (-not (Test-Path 'dist\PromptManager\_internal\PySide6\Qt6Core.dll')) { throw '缺少 _internal\PySide6\Qt6Core.dll' }
+          Compress-Archive -Path dist\PromptManager -DestinationPath "PromptManager-$v-windows-${{ matrix.arch }}.zip"
 
       - name: 打包（Linux）
         if: matrix.kind == 'linux'
