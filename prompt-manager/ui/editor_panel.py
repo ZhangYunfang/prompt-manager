@@ -330,15 +330,22 @@ class EditorPanel(QWidget):
         if not self._stream_worker:
             return
         text, done, error = self._stream_worker.result.get()
+        self._stream_timer.stop()
+        # 50ms 轮询可能停在最后一段之前，收尾补一次，否则尾巴会丢
+        if text:
+            self._result_area.setPlainText(text)
+            scrollbar = self._result_area.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
 
         if not error:
             self._copy_btn.setEnabled(True)
-            self._set_status(f"完成 · 字数 {len(self._editor.toPlainText())}", theme.OK)
+            # 报结果本身的字数：原来报的是左侧编辑区（输入）的字数，容易看成结果不完整
+            self._set_status(f"完成 · 结果 {len(text)} 字", theme.OK)
         else:
             self._copy_btn.setEnabled(False)
-            self._set_status(f"字数 {len(self._editor.toPlainText())}")
+            self._set_status("失败")
             QMessageBox.critical(self, "错误", error)
         self._stream_worker = None
 

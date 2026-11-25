@@ -135,20 +135,19 @@ class DeepSeekClient:
                 stream=True,
             )
             resp.raise_for_status()
+            # 服务端常发 `Content-Type: text/event-stream`（无 charset），requests 会按
+            # ISO-8859-1 解码 → 中文变乱码、JSON 片段解不出被静默丢弃；强制 UTF-8。
+            resp.encoding = "utf-8"
             full = ""
-            buffer = ""
-            for byte_chunk in resp.iter_content(chunk_size=1, decode_unicode=True):
-                if byte_chunk is None:
+            # 按行读，不要 1 字节一读：DeepSeek 一条回复能产生几千个 SSE 事件，
+            # 逐字节累加字符串是 O(n²)，长回复会拖慢到界面来不及刷新。
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
                     continue
-                buffer += byte_chunk
-                if buffer.endswith("\n"):
-                    line = buffer.strip()
-                    buffer = ""
-                    if line:
-                        chunk = _parse_sse_line(line)
-                        if chunk is not None:
-                            full += chunk
-                            result.update(full)
+                chunk = _parse_sse_line(line)
+                if chunk:
+                    full += chunk
+                    result.update(full)
             result.update(full)
             if not full:
                 result.finish("API 返回空结果")
