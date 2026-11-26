@@ -1,10 +1,13 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QTextBrowser,
     QPushButton, QLabel, QMessageBox, QApplication, QCheckBox,
 )
 from PySide6.QtCore import Signal, QThread, QTimer
 
-from api.deepseek_client import DeepSeekClient, StreamResult, FORMAT_SYSTEM_PROMPT, OPTIMIZE_SYSTEM_PROMPT
+from api.deepseek_client import (
+    DeepSeekClient, StreamResult, FORMAT_SYSTEM_PROMPT, OPTIMIZE_SYSTEM_PROMPT,
+    markdown_for_display, sources_markdown, strip_outer_fence,
+)
 from storage.models import HistoryEntry
 from . import theme, icons
 from .sources_dialog import SourcesDialog
@@ -105,6 +108,7 @@ class EditorPanel(QWidget):
         self._cached_tags = []
         self._cached_for_content = ""
         self._last_sources = []
+        self._last_result_text = ""
         self._build_ui()
 
         self._stream_timer = QTimer(self)
@@ -198,10 +202,10 @@ class EditorPanel(QWidget):
         result_row.addWidget(self._copy_btn)
         layout.addLayout(result_row)
 
-        self._result_area = QPlainTextEdit()
+        self._result_area = QTextBrowser()
         self._result_area.setReadOnly(True)
+        self._result_area.setOpenExternalLinks(True)      # 正文里的链接用系统浏览器打开
         self._result_area.setPlaceholderText("整理或优化后的结果将显示在这里…")
-        theme.apply_mono(self._result_area, 13)
         layout.addWidget(self._result_area, 2)
 
         self._status = QLabel("字数 0")
@@ -275,6 +279,7 @@ class EditorPanel(QWidget):
     def _on_clear(self):
         self._editor.clear()
         self._result_area.clear()
+        self._last_result_text = ""
         self._copy_btn.setEnabled(False)
         self._current_history_id = ""
         self._cached_for_content = ""
@@ -338,11 +343,22 @@ class EditorPanel(QWidget):
             return
         text, done, error = self._stream_worker.result.get()
         if text:
-            self._result_area.setPlainText(text)
-            scrollbar = self._result_area.verticalScrollBar()
-            scrollbar.setValue(scrollbar.maximum())
+            # 流式期间按纯文本刷（Markdown 半截渲染会跳版），收尾时再统一渲染
+            self._result_area.setPlainText(strip_outer_fence(text))
+            self._scroll_result_to_end()
         if done:
             self._stream_timer.stop()
+
+    def _scroll_result_to_end(self):
+        scrollbar = self._result_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _render_result(self, text, sources=()):
+        """剥掉外层围栏 → 末尾补「参考来源」→ 按 Markdown 渲染。"""
+        body = strip_outer_fence(text) + sources_markdown(list(sources))
+        self._last_result_text = body
+        self._result_area.setMarkdown(markdown_for_display(body))
+        self._scroll_result_to_end()
 
     def _on_stream_done(self):
         if not self._stream_worker:
@@ -352,9 +368,7 @@ class EditorPanel(QWidget):
         self._stream_timer.stop()
         # 50ms 轮询可能停在最后一段之前，收尾补一次，否则尾巴会丢
         if text:
-            self._result_area.setPlainText(text)
-            scrollbar = self._result_area.verticalScrollBar()
-            scrollbar.setValue(scrollbar.maximum())
+            self._render_result(text, sources)
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
         self._search_cb.setEnabled(True)
@@ -366,7 +380,7 @@ class EditorPanel(QWidget):
             self._copy_btn.setEnabled(True)
             # 报结果本身的字数：原来报的是左侧编辑区（输入）的字数，容易看成结果不完整
             searched = f" · 搜索 {search_count} 次" if search_count else ""
-            self._set_status(f"完成 · 结果 {len(text)} 字{searched}", theme.OK)
+            self._set_status(f"完成 · 结果 {len(self._last_result_text)} 字{searched}", theme.OK)
         else:
             self._copy_btn.setEnabled(False)
             self._set_status("失败")
@@ -379,9 +393,8 @@ class EditorPanel(QWidget):
         SourcesDialog(self._last_sources, self).exec_()
 
     def _copy_result(self):
-        text = self._result_area.toPlainText()
-        if text:
-            QApplication.clipboard().setText(text)
+        if self._last_result_text:
+            QApplication.clipboard().setText(self._last_result_text)
 
     def set_content(self, text: str):
         self._loading = True

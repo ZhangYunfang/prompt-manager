@@ -23,6 +23,64 @@ TITLE_SYSTEM_PROMPT = (
     "the topic of this prompt text. Output ONLY the title, no explanations."
 )
 
+# 追加到正文类任务的 system prompt 末尾：要求以 Markdown 输出，并整体用四个反引号包裹，
+# 避免长文本在传输/渲染环节被截断或吃掉格式标记。展示前由 strip_outer_fence() 剥掉外层围栏。
+OUTPUT_RULE = (
+    "\n\n输出要求：用 Markdown 组织内容；整段回答必须用四个反引号包裹"
+    "（首行 ````，末行 ````，内部可以有普通的三反引号代码块），不要输出其它解释。"
+)
+
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})[^\n]*\n(.*?)\n\1\s*$", re.S)
+
+
+def strip_outer_fence(text: str) -> str:
+    """去掉整体包裹的外层围栏（四个或三个反引号）。
+
+    流式过程中还没收到闭合围栏时，也要把开头那行围栏先去掉了再显示。
+    """
+    stripped = (text or "").strip()
+    match = _FENCE_RE.match(stripped)
+    if match:
+        return match.group(2).strip()
+    lines = stripped.split("\n")
+    if lines and re.fullmatch(r"[`~]{3,}\S*", lines[0].strip()):
+        return "\n".join(lines[1:]).strip()
+    return stripped
+
+
+# Markdown 里单个换行是"软换行"（渲染时并成一段）。模型的输出常按行排版，
+# 直接 setMarkdown 会把行结构吃掉，所以给普通行补两个空格变成硬换行；
+# 标题/列表/引用/表格/代码围栏本身按块处理，不加。
+_BLOCK_LINE = re.compile(r"^\s{0,3}(#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||`{3,}|~{3,}|$)")
+
+
+def markdown_for_display(text: str) -> str:
+    """把普通行补成硬换行，避免 Markdown 渲染时把多行并成一段。"""
+    out, in_fence = [], False
+    for line in (text or "").split("\n"):
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+            out.append(line)
+        elif in_fence or not stripped or _BLOCK_LINE.match(line) or line.endswith("  "):
+            out.append(line)
+        else:
+            out.append(line + "  ")
+    return "\n".join(out)
+
+
+def sources_markdown(sources) -> str:
+    """把来源列表拼成 Markdown 末尾的「参考来源」段落（链接可点）。"""
+    if not sources:
+        return ""
+    lines = ["", "---", "", "**参考来源**", ""]
+    for i, item in enumerate(sources, 1):
+        title = item.get("title") or item.get("url", "")
+        site = item.get("site") or ""
+        lines.append(f"{i}. [{title}]({item.get('url', '')}){'  ·  ' + site if site else ''}")
+    return "\n".join(lines)
+
+
 TAG_SUGGEST_SYSTEM_PROMPT = (
     "Analyze the following prompt text. Return a JSON object with two fields: "
     '"title" (a short 2-8 Chinese character summary) and '
@@ -78,12 +136,27 @@ class StreamResult:
                 )
 
     def count_tool_calls(self, calls):
-        """累加联网工具调用次数（含图片搜索与深度思考搜索）。"""
+        """累加联网工具调用次数，并把搜索结果里的 url/title 也收进来源。
+
+        annotations 只在回答真正"引用"了某条结果时才出现；模型搜了但没打角标时，
+        来源仍然存在于 server_tool_calls[].calls[].sources 里，所以两处都收。
+        """
         with self._lock:
+            seen = {s["url"] for s in self.sources}
             for step in calls or []:
                 for call in (step or {}).get("calls") or []:
                     if (call or {}).get("kind") in _SEARCH_KINDS:
                         self.search_count += 1
+                    for src in (call or {}).get("sources") or []:
+                        url = (src.get("url") or "").strip()
+                        if not url or url in seen:
+                            continue
+                        seen.add(url)
+                        self.sources.append({
+                            "title": (src.get("title") or "").strip() or url,
+                            "url": url,
+                            "site": site_of(url),
+                        })
 
     def finish(self, error: str = ""):
         with self._lock:
@@ -165,6 +238,7 @@ class DeepSeekClient:
 
     def stream_call(self, system_prompt: str, user_content: str, result: StreamResult,
                     thinking: bool = False, search: bool = False):
+        system_prompt = system_prompt + OUTPUT_RULE
         if not self._api_key:
             result.finish("请先在设置中配置 API Key")
             return
@@ -237,10 +311,10 @@ class DeepSeekClient:
             result.finish(f"未知错误: {e}")
 
     def format_cleanup(self, content: str) -> Tuple[bool, str]:
-        return self._call(FORMAT_SYSTEM_PROMPT, content)
+        return self._call(FORMAT_SYSTEM_PROMPT + OUTPUT_RULE, content)
 
     def optimize(self, content: str) -> Tuple[bool, str]:
-        return self._call(OPTIMIZE_SYSTEM_PROMPT, content)
+        return self._call(OPTIMIZE_SYSTEM_PROMPT + OUTPUT_RULE, content)
 
     def test_connection(self) -> Tuple[bool, str]:
         return self._call(FORMAT_SYSTEM_PROMPT, "test")
