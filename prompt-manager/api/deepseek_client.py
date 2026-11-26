@@ -1,5 +1,7 @@
 import json
+import re
 from typing import Tuple
+from urllib.parse import urlparse
 import requests
 
 
@@ -31,10 +33,27 @@ TAG_SUGGEST_SYSTEM_PROMPT = (
 TIMEOUT = 30
 FAST_TIMEOUT = 10
 
+# 用户内容里出现链接时，声明 deepseek_read_url 让服务端抓取网页（只在最后一条用户消息里识别 URL）
+URL_PATTERN = re.compile(r"https?://[^\s，。、）)]+")
+
+WEB_SEARCH_TOOL = {"type": "deepseek_web_search", "name": "deepseek_web_search"}
+READ_URL_TOOL = {"type": "deepseek_read_url", "name": "deepseek_read_url"}
+
+# 模型调用服务端工具时的 kind（search/image_search 是联网搜索，deep_ 开头是深度思考搜索）
+_SEARCH_KINDS = ("search", "image_search", "deep_search", "deep_image_search")
+
+
+def site_of(url: str) -> str:
+    """从 url 取站点名：去掉协议、路径与开头的 www.。"""
+    host = urlparse(url).netloc or url
+    return host[4:] if host.startswith("www.") else host
+
 
 class StreamResult:
     def __init__(self):
         self.text = ""
+        self.sources = []        # [{"title", "url", "site"}]，按出现顺序去重
+        self.search_count = 0
         self.done = False
         self.error = ""
         import threading
@@ -43,6 +62,28 @@ class StreamResult:
     def update(self, text: str):
         with self._lock:
             self.text = text
+
+    def add_annotations(self, annotations):
+        """收集引用（url_citation），同一 url 只留一条。"""
+        with self._lock:
+            seen = {s["url"] for s in self.sources}
+            for item in annotations or []:
+                loc = (item or {}).get("url_citation") or {}
+                url = (loc.get("url") or "").strip()
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                self.sources.append(
+                    {"title": (loc.get("title") or "").strip() or url, "url": url, "site": site_of(url)}
+                )
+
+    def count_tool_calls(self, calls):
+        """累加联网工具调用次数（含图片搜索与深度思考搜索）。"""
+        with self._lock:
+            for step in calls or []:
+                for call in (step or {}).get("calls") or []:
+                    if (call or {}).get("kind") in _SEARCH_KINDS:
+                        self.search_count += 1
 
     def finish(self, error: str = ""):
         with self._lock:
@@ -53,19 +94,31 @@ class StreamResult:
         with self._lock:
             return self.text, self.done, self.error
 
+    def snapshot(self):
+        with self._lock:
+            return self.text, self.done, self.error, list(self.sources), self.search_count
 
-def _parse_sse_line(line: str):
+
+def _parse_sse_delta(line: str):
+    """解析一行 SSE，返回 choices[0].delta；不是数据行/解析失败/[DONE] 返回 None。"""
     if not line.startswith("data:"):
         return None
     data_str = line[5:].strip()
-    if data_str == "[DONE]":
+    if not data_str or data_str == "[DONE]":
         return None
     try:
         data = json.loads(data_str)
-        delta = data["choices"][0].get("delta", {})
-        return delta.get("content", "")
-    except (json.JSONDecodeError, KeyError, IndexError):
-        return ""
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        return choices[0].get("delta") or {}
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+
+def _parse_sse_line(line: str):
+    delta = _parse_sse_delta(line)
+    return "" if delta is None else (delta.get("content") or "")
 
 
 class DeepSeekClient:
@@ -110,10 +163,30 @@ class DeepSeekClient:
         except Exception as e:
             return False, f"未知错误: {e}"
 
-    def stream_call(self, system_prompt: str, user_content: str, result: StreamResult, thinking: bool = False):
+    def stream_call(self, system_prompt: str, user_content: str, result: StreamResult,
+                    thinking: bool = False, search: bool = False):
         if not self._api_key:
             result.finish("请先在设置中配置 API Key")
             return
+        # 声明服务端工具：勾了「联网搜索」就带 web_search；内容里有链接就带上阅读链接。
+        # 不声明时请求与原来完全一致（声明联网工具后服务端会忽略 temperature）。
+        tools = []
+        if search:
+            tools.append(dict(WEB_SEARCH_TOOL))
+        if search or URL_PATTERN.search(user_content or ""):
+            tools.append(dict(READ_URL_TOOL))
+        body = {
+            "model": self._model,
+            "thinking": {"type": "enabled"} if thinking else {"type": "disabled"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": 0.3,
+            "stream": True,
+        }
+        if tools:
+            body["tools"] = tools
         try:
             resp = requests.post(
                 f"{self._base_url}/chat/completions",
@@ -121,16 +194,7 @@ class DeepSeekClient:
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": self._model,
-                    "thinking": {"type": "enabled"} if thinking else {"type": "disabled"},
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
-                    "temperature": 0.3,
-                    "stream": True,
-                },
+                json=body,
                 timeout=TIMEOUT,
                 stream=True,
             )
@@ -144,10 +208,17 @@ class DeepSeekClient:
             for line in resp.iter_lines(decode_unicode=True):
                 if not line:
                     continue
-                chunk = _parse_sse_line(line)
+                delta = _parse_sse_delta(line)
+                if not delta:
+                    continue
+                chunk = delta.get("content") or ""
                 if chunk:
                     full += chunk
                     result.update(full)
+                if delta.get("annotations"):
+                    result.add_annotations(delta["annotations"])
+                if delta.get("server_tool_calls"):
+                    result.count_tool_calls(delta["server_tool_calls"])
             result.update(full)
             if not full:
                 result.finish("API 返回空结果")

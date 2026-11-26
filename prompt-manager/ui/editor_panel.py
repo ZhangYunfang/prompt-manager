@@ -7,10 +7,12 @@ from PySide6.QtCore import Signal, QThread, QTimer
 from api.deepseek_client import DeepSeekClient, StreamResult, FORMAT_SYSTEM_PROMPT, OPTIMIZE_SYSTEM_PROMPT
 from storage.models import HistoryEntry
 from . import theme, icons
+from .sources_dialog import SourcesDialog
 
 
 class _StreamWorker(QThread):
-    def __init__(self, api_key: str, base_url: str, model: str, action: str, content: str, thinking: bool):
+    def __init__(self, api_key: str, base_url: str, model: str, action: str, content: str,
+                 thinking: bool, search: bool = False):
         super().__init__()
         self._api_key = api_key
         self._base_url = base_url
@@ -18,6 +20,7 @@ class _StreamWorker(QThread):
         self._action = action
         self._content = content
         self._thinking = thinking
+        self._search = search
         self.result = StreamResult()
 
     def run(self):
@@ -27,7 +30,8 @@ class _StreamWorker(QThread):
             model=self._model,
         )
         system_prompt = FORMAT_SYSTEM_PROMPT if self._action == "format_cleanup" else OPTIMIZE_SYSTEM_PROMPT
-        client.stream_call(system_prompt, self._content, self.result, thinking=self._thinking)
+        client.stream_call(system_prompt, self._content, self.result,
+                           thinking=self._thinking, search=self._search)
 
 
 class _TitleWorker(QThread):
@@ -100,6 +104,7 @@ class EditorPanel(QWidget):
         self._cached_title = ""
         self._cached_tags = []
         self._cached_for_content = ""
+        self._last_sources = []
         self._build_ui()
 
         self._stream_timer = QTimer(self)
@@ -143,6 +148,10 @@ class EditorPanel(QWidget):
         self._thinking_cb.setIcon(icons.make("chip", "dim", 14))
         self._thinking_cb.setToolTip("开启后 AI 会更仔细地推理，但耗时更长")
         btn_layout.addWidget(self._thinking_cb)
+
+        self._search_cb = QCheckBox("联网搜索")
+        self._search_cb.setToolTip("让 AI 先联网搜索再作答（结果会带参考来源；同时勾选深度思考则是边推理边搜索，更慢）")
+        btn_layout.addWidget(self._search_cb)
         btn_layout.addSpacing(4)
 
         self._format_btn = icons.IconButton("整理格式", "align", "text")
@@ -176,6 +185,12 @@ class EditorPanel(QWidget):
         result_header.setObjectName("eyebrow")
         result_row.addWidget(result_header)
         result_row.addStretch()
+
+        self._sources_btn = theme.variant(QPushButton("参考来源"), "ghost")
+        self._sources_btn.setToolTip("查看这次回答用到的网页来源")
+        self._sources_btn.setVisible(False)
+        self._sources_btn.clicked.connect(self._show_sources)
+        result_row.addWidget(self._sources_btn)
 
         self._copy_btn = theme.variant(icons.IconButton("复制结果", "copy", "text"), "ghost")
         self._copy_btn.setEnabled(False)
@@ -301,6 +316,8 @@ class EditorPanel(QWidget):
         self._format_btn.setEnabled(False)
         self._optimize_btn.setEnabled(False)
         self._copy_btn.setEnabled(False)
+        self._search_cb.setEnabled(False)
+        self._sources_btn.setVisible(False)
         self._set_status("正在调用 AI…", theme.CYAN)
 
         self._stream_worker = _StreamWorker(
@@ -310,6 +327,7 @@ class EditorPanel(QWidget):
             action=action,
             content=content,
             thinking=self._thinking_cb.isChecked(),
+            search=self._search_cb.isChecked(),
         )
         self._stream_worker.finished.connect(self._on_stream_done)
         self._stream_timer.start()
@@ -329,7 +347,8 @@ class EditorPanel(QWidget):
     def _on_stream_done(self):
         if not self._stream_worker:
             return
-        text, done, error = self._stream_worker.result.get()
+        text, done, error, sources, search_count = self._stream_worker.result.snapshot()
+        self._last_sources = sources
         self._stream_timer.stop()
         # 50ms 轮询可能停在最后一段之前，收尾补一次，否则尾巴会丢
         if text:
@@ -338,16 +357,26 @@ class EditorPanel(QWidget):
             scrollbar.setValue(scrollbar.maximum())
         self._format_btn.setEnabled(True)
         self._optimize_btn.setEnabled(True)
+        self._search_cb.setEnabled(True)
 
+        if sources:
+            self._sources_btn.setText(f"参考来源 {len(sources)}")
+            self._sources_btn.setVisible(True)
         if not error:
             self._copy_btn.setEnabled(True)
             # 报结果本身的字数：原来报的是左侧编辑区（输入）的字数，容易看成结果不完整
-            self._set_status(f"完成 · 结果 {len(text)} 字", theme.OK)
+            searched = f" · 搜索 {search_count} 次" if search_count else ""
+            self._set_status(f"完成 · 结果 {len(text)} 字{searched}", theme.OK)
         else:
             self._copy_btn.setEnabled(False)
             self._set_status("失败")
             QMessageBox.critical(self, "错误", error)
         self._stream_worker = None
+
+    def _show_sources(self):
+        if not self._last_sources:
+            return
+        SourcesDialog(self._last_sources, self).exec_()
 
     def _copy_result(self):
         text = self._result_area.toPlainText()

@@ -24,7 +24,7 @@ class AboutDialog(QDialog):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        version = QLabel("版本 1.6.3")
+        version = QLabel("版本 1.6.4")
         version.setObjectName("dim")
         version.setAlignment(Qt.AlignCenter)
         layout.addWidget(version)
@@ -51,7 +51,8 @@ class AboutDialog(QDialog):
 <li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">整理格式</b>：调用 AI 修正错别字、标点、空格和换行。</li>
 <li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">优化提示词</b>：调用 AI 增强提示词的清晰度与效果。</li>
 <li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">深度思考</b>：勾选后 AI 先推理再输出，耗时较长。</li>
-<li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">AI 结果区</b>：处理结果流式展示，可一键复制。</li>
+<li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">联网搜索</b>：勾选后 AI 先联网搜索再作答，回答带引用；正文里有链接时会自动读取网页。</li>
+<li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">AI 结果区</b>：处理结果流式展示，可一键复制；带来源时点「参考来源」看列表并打开原文。</li>
 <li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">保存</b>：把编辑区内容存进左侧「我的提示词」，弹框里可改标题、勾选或补标签。</li>
 <li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">清除</b>：清空编辑区和结果区，开始新提示词。</li>
 <li style="color:{theme.TEXT_DIM};"><b style="color:{theme.CYAN};">外观</b>：右上角按钮切换黑夜 / 白天，选择自动记住。</li>
