@@ -35,7 +35,7 @@ class _TagSuggestWorker(QThread):
 
 class BookmarkDialog(QDialog):
     def __init__(self, config_getter, content: str, parent=None, entry=None):
-        """entry 为空＝新增收藏（让 AI 提议标题/标签）；给了 entry＝修改，直接预填、不再请求 AI。"""
+        """entry 为空＝新增提示词（让 AI 提议标题/标签）；给了 entry＝修改，直接预填、不再请求 AI。"""
         super().__init__(parent)
         self._config_getter = config_getter
         self._content = content
@@ -44,7 +44,7 @@ class BookmarkDialog(QDialog):
         self._title = ""
         self._worker = None
         self._checkboxes = []
-        self.setWindowTitle("修改提示词" if entry else "添加收藏")
+        self.setWindowTitle("修改提示词" if entry else "添加提示词")
         self.setMinimumWidth(400)
         self._build_ui()
         if entry:
@@ -76,7 +76,7 @@ class BookmarkDialog(QDialog):
         layout.addWidget(self._custom_tags)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("保存" if self._entry else "收藏")
+        buttons.button(QDialogButtonBox.Ok).setText("保存")
         buttons.button(QDialogButtonBox.Cancel).setText("取消")
         theme.variant(buttons.button(QDialogButtonBox.Ok), "primary")
         buttons.accepted.connect(self._on_accept)
