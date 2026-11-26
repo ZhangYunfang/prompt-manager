@@ -2,7 +2,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QTextBrowser,
     QPushButton, QLabel, QMessageBox, QApplication, QCheckBox,
 )
-from PySide6.QtCore import Signal, QThread, QTimer
+from PySide6.QtCore import Signal, QThread, QTimer, Qt
+from PySide6.QtGui import QColor, QPainter
 
 from api.deepseek_client import (
     DeepSeekClient, StreamResult, FORMAT_SYSTEM_PROMPT, OPTIMIZE_SYSTEM_PROMPT,
@@ -88,6 +89,55 @@ class _PreFetchWorker(QThread):
                 self.done_signal.emit("", [])
         except Exception:
             self.done_signal.emit("", [])
+
+
+class _BlocksLoader(QWidget):
+    """6 个方块顺序点亮后清空，AI 调用期间的加载指示。"""
+
+    COUNT = 6
+    BLOCK_W = 8
+    BLOCK_H = 12
+    GAP = 4
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._lit = 0
+        self.setFixedSize(self.COUNT * self.BLOCK_W + (self.COUNT - 1) * self.GAP, self.BLOCK_H)
+        self._timer = QTimer(self)
+        self._timer.setInterval(140)
+        self._timer.timeout.connect(self._tick)
+        self.hide()
+
+    def start(self):
+        self._lit = 0
+        self.show()
+        self._timer.start()
+
+    def stop(self):
+        self._timer.stop()
+        self.hide()
+
+    def _tick(self):
+        self._lit = (self._lit + 1) % (self.COUNT + 1)
+        self.update()
+
+    def _colors(self):
+        """当前主题强调色，已点亮 235、未点亮 55 透明。"""
+        main, _ = theme.accent_pair()
+        colors = []
+        for i in range(self.COUNT):
+            color = QColor(main)
+            color.setAlpha(235 if i < self._lit else 55)
+            colors.append(color)
+        return colors
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        for i, color in enumerate(self._colors()):
+            painter.setBrush(color)
+            painter.drawRoundedRect(i * (self.BLOCK_W + self.GAP), 0, self.BLOCK_W, self.BLOCK_H, 2, 2)
 
 
 class EditorPanel(QWidget):
@@ -188,6 +238,9 @@ class EditorPanel(QWidget):
         result_header = QLabel("AI 结果")
         result_header.setObjectName("eyebrow")
         result_row.addWidget(result_header)
+
+        self._loader = _BlocksLoader()
+        result_row.addWidget(self._loader)
         result_row.addStretch()
 
         self._sources_btn = theme.variant(QPushButton("参考来源"), "ghost")
@@ -324,6 +377,7 @@ class EditorPanel(QWidget):
         self._search_cb.setEnabled(False)
         self._sources_btn.setVisible(False)
         self._set_status("正在调用 AI…", theme.CYAN)
+        self._loader.start()
 
         self._stream_worker = _StreamWorker(
             api_key=api_key,
@@ -366,6 +420,7 @@ class EditorPanel(QWidget):
         text, done, error, sources, search_count = self._stream_worker.result.snapshot()
         self._last_sources = sources
         self._stream_timer.stop()
+        self._loader.stop()
         # 50ms 轮询可能停在最后一段之前，收尾补一次，否则尾巴会丢
         if text:
             self._render_result(text, sources)
