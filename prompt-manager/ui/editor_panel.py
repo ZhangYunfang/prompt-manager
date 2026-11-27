@@ -147,7 +147,7 @@ class EditorPanel(QWidget):
 
     def __init__(self, config_getter, parent=None):
         super().__init__(parent)
-        theme.as_panel(self)
+        # 本控件不再是卡片：上下两半各自是卡片，才能和左右两侧面板的外轮廓一致
         self._config_getter = config_getter
         self._current_history_id = ""
         self._loading = False
@@ -172,13 +172,14 @@ class EditorPanel(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # 上半：编辑区；下半：AI 结果。两者放进纵向分隔条，用户可拖拽改高度
-        top = QWidget()
+        # 上半：编辑区；下半：AI 结果。各自是一张卡片（跟左右两侧面板同款外轮廓），
+        # 中间夹纵向分隔条 —— 这样上下之间的缝看起来就跟左右列之间一样
+        top = theme.as_panel(QWidget())
         top_layout = QVBoxLayout(top)
-        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setContentsMargins(16, 14, 16, 14)
         top_layout.setSpacing(10)
 
         header_row = QHBoxLayout()
@@ -239,9 +240,9 @@ class EditorPanel(QWidget):
 
         top_layout.addLayout(btn_layout)
 
-        bottom = QWidget()
+        bottom = theme.as_panel(QWidget())
         bottom_layout = QVBoxLayout(bottom)
-        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setContentsMargins(16, 14, 16, 14)
         bottom_layout.setSpacing(10)
 
         result_row = QHBoxLayout()
