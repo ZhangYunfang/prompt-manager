@@ -127,6 +127,10 @@ def _draw(kind: str, p: QPainter, color: QColor) -> None:
         p.setBrush(QColor(theme.SURFACE))          # 让前件压掉后件的线
         p.drawPath(front)
 
+    elif kind == "check":                          # 复制成功后的对勾
+        p.drawLine(QPointF(c - 4.6, c + 0.2), QPointF(c - 1.4, c + 3.4))
+        p.drawLine(QPointF(c - 1.4, c + 3.4), QPointF(c + 4.8, c - 3.4))
+
 
 def make(kind: str, role: str = "text", px: int = 16) -> QIcon:
     color = QColor(ROLES.get(role, ROLES["text"])())

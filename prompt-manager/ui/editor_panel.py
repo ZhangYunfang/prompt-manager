@@ -170,6 +170,11 @@ class EditorPanel(QWidget):
         self._prefetch_timer.setInterval(2000)
         self._prefetch_timer.timeout.connect(self._prefetch)
 
+        self._copy_timer = QTimer(self)
+        self._copy_timer.setSingleShot(True)
+        self._copy_timer.setInterval(1600)
+        self._copy_timer.timeout.connect(self._restore_copy_btn)
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -356,6 +361,8 @@ class EditorPanel(QWidget):
         self._result_area.clear()
         self._last_result_text = ""
         self._copy_btn.setEnabled(False)
+        self._copy_timer.stop()          # 别让「已复制」留到下一次结果上
+        self._restore_copy_btn()
         self._current_history_id = ""
         self._cached_for_content = ""
 
@@ -470,8 +477,19 @@ class EditorPanel(QWidget):
         SourcesDialog(self._last_sources, self).exec_()
 
     def _copy_result(self):
-        if self._last_result_text:
-            QApplication.clipboard().setText(self._last_result_text)
+        if not self._last_result_text:
+            return
+        QApplication.clipboard().setText(self._last_result_text)
+        # 复制成功的反馈：按钮变「已复制」+ 对勾 + 主题色，1.6s 后自己复原
+        self._copy_btn.setText("已复制")
+        self._copy_btn.set_kind("check")
+        theme.variant(self._copy_btn, "accent")
+        self._copy_timer.start()
+
+    def _restore_copy_btn(self):
+        self._copy_btn.setText("复制结果")
+        self._copy_btn.set_kind("copy")
+        theme.variant(self._copy_btn, "ghost")
 
     def set_content(self, text: str):
         self._loading = True
