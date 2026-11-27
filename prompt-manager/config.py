@@ -2,6 +2,9 @@ import json
 import os
 from pathlib import Path
 
+# 版本号唯一来源：关于页与 build.spec 的 Info.plist 都读这里，避免两处写法漂移
+APP_VERSION = "1.6.7"
+
 
 class Config:
     DEFAULT_BASE_URL = "https://api.deepseek.com"

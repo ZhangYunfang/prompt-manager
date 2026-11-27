@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from config import APP_VERSION
 from . import theme
 
 
@@ -24,7 +25,7 @@ class AboutDialog(QDialog):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        version = QLabel("版本 1.6.6")
+        version = QLabel(f"版本 {APP_VERSION}")
         version.setObjectName("dim")
         version.setAlignment(Qt.AlignCenter)
         layout.addWidget(version)

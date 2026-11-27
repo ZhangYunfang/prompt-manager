@@ -1,5 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 import sys
+
+# 版本号唯一来源在 config.py，Info.plist 跟着走，避免两处漂移
+sys.path.insert(0, os.path.dirname(os.path.abspath(SPEC)))
+from config import APP_VERSION  # noqa: E402
 
 block_cipher = None
 
@@ -81,8 +86,8 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': '提示词管理',
             'CFBundleDisplayName': '提示词管理',
-            'CFBundleShortVersionString': '1.6.5',
-            'CFBundleVersion': '1.6.5',
+            'CFBundleShortVersionString': APP_VERSION,
+            'CFBundleVersion': APP_VERSION,
             'NSHighResolutionCapable': True,
         },
     )
