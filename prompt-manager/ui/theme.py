@@ -87,6 +87,9 @@ MAX_SCALE = 1.4
 SCALE_STEP = 0.1
 FONT_SCALE = 1.0
 
+# 分隔条粗细（左右分栏与上下分栏共用，改这里两处一起变）
+SPLITTER_HANDLE = 6
+
 globals().update(DARK)
 
 
@@ -365,8 +368,9 @@ QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 
 /* 分隔条 */
 QSplitter::handle {{ background: transparent; }}
-QSplitter::handle:horizontal {{ width: 10px; }}
-QSplitter::handle:hover {{ background: rgba({t['ACCENT_RGB']}, 14%); border-radius: 5px; }}
+QSplitter::handle:horizontal {{ width: {SPLITTER_HANDLE}px; }}
+QSplitter::handle:vertical {{ height: {SPLITTER_HANDLE}px; }}
+QSplitter::handle:hover {{ background: rgba({t['ACCENT_RGB']}, 14%); border-radius: 3px; }}
 
 /* 勾选框 */
 QCheckBox {{ color: {t['TEXT_DIM']}; font-size: {_f(13)}; spacing: 8px; }}

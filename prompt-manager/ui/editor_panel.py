@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QTextBrowser,
-    QPushButton, QLabel, QMessageBox, QApplication, QCheckBox,
+    QPushButton, QLabel, QMessageBox, QApplication, QCheckBox, QSplitter,
 )
 from PySide6.QtCore import Signal, QThread, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter
@@ -175,6 +175,12 @@ class EditorPanel(QWidget):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(10)
 
+        # 上半：编辑区；下半：AI 结果。两者放进纵向分隔条，用户可拖拽改高度
+        top = QWidget()
+        top_layout = QVBoxLayout(top)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(10)
+
         header_row = QHBoxLayout()
         header_row.setSpacing(8)
         header = QLabel("编辑区")
@@ -186,14 +192,14 @@ class EditorPanel(QWidget):
         clear_btn.setToolTip("清除内容，下次输入作为新提示词")
         clear_btn.clicked.connect(self._on_clear)
         header_row.addWidget(clear_btn)
-        layout.addLayout(header_row)
+        top_layout.addLayout(header_row)
 
         self._editor = QPlainTextEdit()
         self._editor.setPlaceholderText("在这里输入提示词…")
         theme.apply_mono(self._editor, 13)
         self._editor.setTabChangesFocus(True)
         self._editor.textChanged.connect(self._on_text_changed)
-        layout.addWidget(self._editor, 3)
+        top_layout.addWidget(self._editor, 1)
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
@@ -231,7 +237,12 @@ class EditorPanel(QWidget):
         self._new_btn.clicked.connect(self._on_new_prompt)
         btn_layout.addWidget(self._new_btn)
 
-        layout.addLayout(btn_layout)
+        top_layout.addLayout(btn_layout)
+
+        bottom = QWidget()
+        bottom_layout = QVBoxLayout(bottom)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(10)
 
         result_row = QHBoxLayout()
         result_row.setSpacing(8)
@@ -253,17 +264,27 @@ class EditorPanel(QWidget):
         self._copy_btn.setEnabled(False)
         self._copy_btn.clicked.connect(self._copy_result)
         result_row.addWidget(self._copy_btn)
-        layout.addLayout(result_row)
+        bottom_layout.addLayout(result_row)
 
         self._result_area = QTextBrowser()
         self._result_area.setReadOnly(True)
         self._result_area.setOpenExternalLinks(True)      # 正文里的链接用系统浏览器打开
         self._result_area.setPlaceholderText("整理或优化后的结果将显示在这里…")
-        layout.addWidget(self._result_area, 2)
+        bottom_layout.addWidget(self._result_area, 1)
 
         self._status = QLabel("字数 0")
         self._status.setObjectName("dim")
-        layout.addWidget(self._status)
+        bottom_layout.addWidget(self._status)
+
+        self._splitter = QSplitter(Qt.Vertical)
+        self._splitter.setHandleWidth(theme.SPLITTER_HANDLE)
+        self._splitter.addWidget(top)
+        self._splitter.addWidget(bottom)
+        self._splitter.setChildrenCollapsible(False)
+        self._splitter.setStretchFactor(0, 1)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setSizes([320, 320])
+        layout.addWidget(self._splitter, 1)
 
     def _on_text_changed(self):
         if self._loading:

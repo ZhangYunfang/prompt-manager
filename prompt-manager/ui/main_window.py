@@ -215,7 +215,7 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._header)
 
         splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(10)
+        splitter.setHandleWidth(theme.SPLITTER_HANDLE)
 
         self._bookmark_panel = BookmarkPanel()
         self._editor_panel = EditorPanel(self._get_config)
